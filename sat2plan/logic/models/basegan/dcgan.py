@@ -112,8 +112,6 @@ def run_dcgan():
 
     cuda = True if torch.cuda.is_available() else False
 
-    cuda = True if torch.cuda.is_available() else False
-
     # Loss function
     adversarial_loss = torch.nn.BCELoss()
 

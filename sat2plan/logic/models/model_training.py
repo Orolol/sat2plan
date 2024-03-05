@@ -11,6 +11,8 @@ from torch.autograd import Variable
 from torch import nn
 import torch
 
+import os
+
 #Import des hyperparamètres
 HPT = Configuration()
 
@@ -30,6 +32,9 @@ channels = HPT.channels
 sample_interval = HPT.sample_interval
 from_scratch = True
 cuda = True if torch.cuda.is_available() else False
+
+
+os.makedirs("images", exist_ok=True)
 
 
 #Loss

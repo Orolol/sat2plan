@@ -155,7 +155,7 @@ discriminator.apply(weights_init_normal)
 
 # Configure data loader
 dataloader = torch.utils.data.DataLoader(
-    datasets.ImageFolder("../../../data", transform=transforms.Compose([
+    datasets.ImageFolder("../../../../data/data-1k", transform=transforms.Compose([
         # transforms.Resize(256),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),

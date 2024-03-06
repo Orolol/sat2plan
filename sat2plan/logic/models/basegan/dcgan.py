@@ -56,9 +56,9 @@ class Generator(nn.Module):
         # print("Z", z.shape)
         # out = self.l1(z)
         # out = z.view(z.shape[0], 128, self.init_size, self.init_size)
-        # print("OUT", z.shape)
+        print("OUT", z.shape)
         img = self.conv_blocks(z)
-        # print("IMG", img.shape)
+        print("IMG", img.shape)
         return img
 
 
@@ -96,7 +96,9 @@ class Discriminator(nn.Module):
 
 def run_dcgan():
 
+    print("RUNNING DCGAN")
     os.makedirs("images", exist_ok=True)
+    os.makedirs("models_checkpoint", exist_ok=True)
 
     n_epochs = 200
     batch_size = 16
@@ -105,7 +107,7 @@ def run_dcgan():
     b2 = 0.999
     n_cpu = 6
     latent_dim = 100
-    img_size = 256
+    img_size = 64
     channels = 3
     sample_interval = 10
     from_scratch = True
@@ -132,11 +134,13 @@ def run_dcgan():
             generator.load_state_dict(torch.load(generator_files[0]))
         if discriminator_files:
             discriminator.load_state_dict(torch.load(discriminator_files[0]))
-
+    print("Check CUDA")
     if cuda:
         generator.cuda()
         discriminator.cuda()
         adversarial_loss.cuda()
+
+    print("Check CUDA :", cuda)
 
     # Initialize weights
     generator.apply(weights_init_normal)
@@ -165,7 +169,7 @@ def run_dcgan():
     # ----------
     #  Training
     # ----------
-
+    print('Start training')
     for epoch in range(n_epochs):
         for i, (imgs, _) in enumerate(dataloader):
 
@@ -184,7 +188,6 @@ def run_dcgan():
                 1.0), requires_grad=False)
             fake = Variable(Tensor(imgs.shape[0], 1).fill_(
                 0.0), requires_grad=False)
-
             # Configure input
             real_imgs = plan
 
@@ -193,16 +196,16 @@ def run_dcgan():
             # -----------------
 
             optimizer_G.zero_grad()
-
             # Generate a batch of images
-            gen_imgs = generator(sat)
+            try:
+                gen_imgs = generator(sat)
+            except Exception as e:
+                print("Error", e)
 
             # Loss measures generator's ability to fool the discriminator
             g_loss = adversarial_loss(discriminator(gen_imgs), valid)
-
             g_loss.backward()
             optimizer_G.step()
-
             # ---------------------
             #  Train Discriminator
             # ---------------------
@@ -214,7 +217,6 @@ def run_dcgan():
             fake_loss = adversarial_loss(
                 discriminator(gen_imgs.detach()), fake)
             d_loss = (real_loss + fake_loss) / 2
-
             d_loss.backward()
             optimizer_D.step()
 

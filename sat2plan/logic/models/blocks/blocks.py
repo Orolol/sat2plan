@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class CNN_Block(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
+    def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1):
         super().__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride,
@@ -17,7 +17,7 @@ class CNN_Block(nn.Module):
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels,  kernel_size, stride, padding, down=True, act="relu", use_dropout=False):
+    def __init__(self, in_channels, out_channels,  kernel_size=4, stride=2, padding=1, down=True, act="relu", use_dropout=False):
         super().__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride,

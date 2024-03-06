@@ -7,11 +7,11 @@ import torch
 from colorama import Fore, Style
 from google.cloud import storage
 
-from sat2plan.scripts.params import *
+from sat2plan.scripts.params import MODEL_TARGET, BUCKET_NAME, MLFLOW_TRACKING_URI, MLFLOW_EXPERIMENT, MLFLOW_MODEL_NAME
 import mlflow
 from mlflow.tracking import MlflowClient
 
-LOCAL_REGISTRY_PATH = "models"
+LOCAL_REGISTRY_PATH = os.getcwd() + "/checkpoints"
 
 
 def save_results(params: dict, metrics: dict) -> None:
@@ -41,7 +41,7 @@ def save_results(params: dict, metrics: dict) -> None:
 
 def save_model(model: torch.nn.Module = None) -> None:
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-
+    print(os.getcwd())
     model_path = os.path.join(LOCAL_REGISTRY_PATH, "models", f"{timestamp}.pt")
     torch.save(model.state_dict(), model_path)
 
@@ -60,7 +60,7 @@ def save_model(model: torch.nn.Module = None) -> None:
 
     if MODEL_TARGET == "mlflow":
         mlflow.pytorch.log_model(
-            model=model,
+            pytorch_model=model,
             artifact_path="model",
             registered_model_name=MLFLOW_MODEL_NAME
         )
@@ -155,3 +155,24 @@ def mlflow_run(func):
         print("✅ mlflow_run auto-log done")
 
         return results
+
+
+def save_checkpoint(model, optimizer, filename="my_checkpoint.pth.tar"):
+    print("=> Saving checkpoint")
+    checkpoint = {
+        "state_dict": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+    }
+    torch.save(checkpoint, filename)
+
+
+def load_checkpoint(checkpoint_file, model, optimizer, lr):
+    print("=> Loading checkpoint")
+    checkpoint = torch.load(checkpoint_file, map_location=DEVICE)
+    model.load_state_dict(checkpoint["state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer"])
+
+    # If we don't do this then it will just have learning rate of old checkpoint
+    # and it will lead to many hours of debugging \:
+    for param_group in optimizer.param_groups:
+        param_group["lr"] = lr

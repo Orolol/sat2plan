@@ -1,13 +1,14 @@
 import torch
 
+
 class Configuration:
 
     def __init__(self):
 
-        #Hyperparamètres
+        # Hyperparamètres
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.train_dir = "./maps/train"
-        self.val_dir = "./maps/val"
+        self.train_dir = "./data/split/train"
+        self.val_dir = "./data/split/val"
 
         self.learning_rate = 2e-4
         self.beta1 = 0.5
@@ -35,7 +36,6 @@ class Configuration:
 
         self.checkpoint_disc = "disc.pth.tar"
         self.checkpoint_gen = "gen.pth.tar"
-
 
     def init(self, **kwargs):
         pass

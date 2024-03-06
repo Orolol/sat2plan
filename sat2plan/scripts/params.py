@@ -12,3 +12,5 @@ INSTANCE = os.environ.get("INSTANCE")
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI")
 MLFLOW_EXPERIMENT = os.environ.get("MLFLOW_EXPERIMENT")
 MLFLOW_MODEL_NAME = os.environ.get("MLFLOW_MODEL_NAME")
+
+MODEL_TARGET = os.environ.get("MODEL_TARGET")

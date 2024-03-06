@@ -4,7 +4,7 @@ from sat2plan.scripts.params import BUCKET_NAME
 
 
 def download_bucket_folder(folder_name, val_size=0):
-    destination_folder = './sat2plan/data/'
+    destination_folder = './data/'
     if val_size == 0:
         os.makedirs(destination_folder + folder_name, exist_ok=True)
     else:

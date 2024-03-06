@@ -5,17 +5,20 @@ from pathlib import Path
 from colorama import Fore, Style
 from dateutil.parser import parse
 
-from sat2plan.logic.models.basegan.dcgan import run_dcgan
 from sat2plan.logic.preproc.data import download_bucket_folder
+from sat2plan.logic.models.unet.model_training import train_model
 
 
 # @mlflow_run
 def train():
-    print(Fore.YELLOW + "Training DCGAN" + Style.RESET_ALL)
-    print("Downloading data from GCP bucket")
-    download_bucket_folder('data-1k')
-    print("Running DCGAN")
-    run_dcgan()
+
+    data_bucket = 'data-1k'
+
+    print(Fore.YELLOW + "Training unet" + Style.RESET_ALL)
+    download_bucket_folder(data_bucket, val_size=0.1)
+
+    print("Running unet training")
+    train_model(data_bucket=data_bucket)
 
 
 def pred():

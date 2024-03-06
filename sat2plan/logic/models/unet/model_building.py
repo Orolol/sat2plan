@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from sat2plan.logic.models.blocks import CNN_Block, ConvBlock
+from sat2plan.logic.models.blocks.blocks import CNN_Block, ConvBlock
 
 
 ####################################################################################################################
@@ -9,7 +9,7 @@ from sat2plan.logic.models.blocks import CNN_Block, ConvBlock
 
 
 class Discriminator(nn.Module):
-    def __init__(self, kernel_size, stride, padding, in_channels=3, features=[64, 128, 256, 512]):
+    def __init__(self, kernel_size=4, stride=2, padding=1, in_channels=3, features=[64, 128, 256, 512]):
         super().__init__()
         self.initial = nn.Sequential(
             nn.Conv2d(
@@ -49,7 +49,7 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self,  kernel_size, stride, padding, in_channels=3, features=64):
+    def __init__(self,  kernel_size=4, stride=2, padding=1, in_channels=3, features=64):
         super().__init__()
         self.initial_down = nn.Sequential(
             nn.Conv2d(in_channels, features, kernel_size,

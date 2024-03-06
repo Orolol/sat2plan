@@ -165,3 +165,6 @@ data/
 *.DS_Store
 *.pth
 *.tar
+models_checkpoints/
+checkpoints/
+images/

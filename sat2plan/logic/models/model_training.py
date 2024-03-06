@@ -24,7 +24,6 @@ b2 = HPT.b2
 n_cpu = HPT.n_cpu
 latent_dim = HPT.latent_dim
 img_size = HPT.img_size
-n_blocks = HPT.n_blocks
 stride = HPT.stride
 padding = HPT.padding
 kernel_size = HPT.kernel_size
@@ -42,8 +41,8 @@ adversarial_loss = nn.BCELoss()
 
 
 #Initialisation du discriminateur et du générateur
-discriminator = Discriminator(img_size, n_blocks, stride, padding, kernel_size, channels)
-generator = Generator(img_size, latent_dim, n_blocks, stride, padding, kernel_size, channels)
+discriminator = Discriminator(img_size, stride, padding, kernel_size, channels)
+generator = Generator(img_size, latent_dim, stride, padding, kernel_size, channels)
 
 if cuda:
         generator.cuda()

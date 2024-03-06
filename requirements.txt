@@ -8,3 +8,4 @@ scikit-learn
 scipy
 colorama
 google-cloud-storage
+mlflow

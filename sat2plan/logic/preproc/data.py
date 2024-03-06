@@ -6,7 +6,7 @@ from sat2plan.scripts.params import BUCKET_NAME
 def download_bucket_folder(folder_name):
     destination_folder = './sat2plan/data/'
     os.makedirs(destination_folder + folder_name, exist_ok=True)
-    storage_client = storage.Client()
+    storage_client = storage.Client.create_anonymous_client()
     bucket = storage_client.bucket(BUCKET_NAME)
 
     blobs = bucket.list_blobs(prefix=folder_name)

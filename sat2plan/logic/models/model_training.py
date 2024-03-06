@@ -1,151 +1,169 @@
 from model_building import Generator, Discriminator, weights_init_normal
 from model_config import Configuration
 
+import torch
+import torch.nn as nn
 from torchvision import datasets
 import torchvision.transforms as transforms
-from torchvision.utils import save_image
-
-from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from torch.autograd import Variable
-from torch import nn
-import torch
-
+from torchvision.utils import save_image
 import os
 
 #Import des hyperparamètres
-HPT = Configuration()
+CFG = Configuration()
 
-n_epochs = HPT.n_epochs
-batch_size = HPT.batch_size
-lr = HPT.lr
-b1 = HPT.b1
-b2 = HPT.b2
-n_cpu = HPT.n_cpu
-latent_dim = HPT.latent_dim
-img_size = HPT.img_size
-stride = HPT.stride
-padding = HPT.padding
-kernel_size = HPT.kernel_size
-channels = HPT.channels
-sample_interval = HPT.sample_interval
+device = CFG.device
+train_dir = CFG.train_dir
+val_dir = CFG.val_dir
+
+learning_rate = CFG.learning_rate
+beta1 = CFG.beta1
+beta2 = CFG.beta2
+
+n_cpu = CFG.n_cpu
+
+batch_size = CFG.batch_size
+n_epochs = CFG.n_epochs
+sample_interval = CFG.sample_interval
+
+image_size = CFG.image_size
+channels_img = CFG.channels_img
+
+stride = CFG.stride
+padding = CFG.padding
+kernel_size = CFG.kernel_size
+
+num_workers = CFG.num_workers
+l1_lambda = CFG.l1_lambda
+lambda_gp = CFG.lambda_gp
+
+load_model = CFG.load_model
+save_model = CFG.save_model
+
+checkpoint_disc = CFG.checkpoint_disc
+checkpoint_gen = CFG.checkpoint_gen
+
 from_scratch = True
 cuda = True if torch.cuda.is_available() else False
 
 
+netD = Discriminator(in_channels=3).cuda()
+netG = Generator(in_channels=3).cuda()
+OptimizerD = torch.optim.Adam(netD.parameters(),lr=learning_rate,betas=(beta1,beta2))
+OptimizerG = torch.optim.Adam(netG.parameters(),lr=learning_rate,betas=(beta1,beta2))
+BCE_Loss = nn.BCEWithLogitsLoss()
+L1_Loss = nn.L1Loss()
+
+cuda = True if torch.cuda.is_available() else False
+Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
+
+torch.backends.cudnn.benchmark = True
+Gen_loss = []
+Dis_loss = []
+
 os.makedirs("images", exist_ok=True)
+os.makedirs("data", exist_ok=True)
 
-
-#Loss
-adversarial_loss = nn.BCELoss()
-
-
-#Initialisation du discriminateur et du générateur
-discriminator = Discriminator(img_size, stride, padding, kernel_size, channels)
-generator = Generator(img_size, latent_dim, stride, padding, kernel_size, channels)
-
-if cuda:
-        generator.cuda()
-        discriminator.cuda()
-        adversarial_loss.cuda()
-
-#Initialisation des poids
-discriminator.apply(weights_init_normal)
-generator.apply(weights_init_normal)
-
-
-# Configuration data loader
-dataloader = DataLoader(
-    datasets.ImageFolder("sat2plan/data", transform=transforms.Compose([
+dataloader = torch.utils.data.DataLoader(
+    datasets.ImageFolder("data/", transform=transforms.Compose([
         # transforms.Resize(256),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])),
     batch_size=batch_size,
-    shuffle=True
+    shuffle=True,
+)
+
+
+"""if load_model:
+    load_checkpoint(
+        CHECKPOINT_GEN,netG,OptimizerG,LEARNING_RATE
     )
+    load_checkpoint(
+        CHECKPOINT_DISC,netD,OptimizerD,LEARNING_RATE
+    )"""
+
+""" train_dataset = Satellite2Map_Data(root=TRAIN_DIR)
+train_dl = DataLoader(train_dataset,batch_size=BATCH_SIZE,shuffle=True,num_workers=NUM_WORKERS,pin_memory=True)
+# G_Scaler = torch.cuda.amp.GradScaler()
+# D_Scaler = torch.cuda.amp.GradScaler()
+val_dataset = Satellite2Map_Data(root=VAL_DIR)
+val_dl = DataLoader(val_dataset,batch_size=BATCH_SIZE,shuffle=True,num_workers=NUM_WORKERS,pin_memory=True) """
 
 
-# Optimizers
-optimizer_G = torch.optim.Adam(
-    generator.parameters(), lr=lr, betas=(b1, b2))
-optimizer_D = torch.optim.Adam(
-    discriminator.parameters(), lr=lr, betas=(b1, b2))
+""" for epoch in range(NUM_EPOCHS):
+    train(
+        netG, netD, train_dl, OptimizerG, OptimizerD, L1_Loss, BCE_Loss
+    )
+    #Generator_loss.append(g_loss.item())
+    #Discriminator_loss.append(d_loss.item())
+    if SAVE_MODEL and epoch%50==0:
+        save_checkpoint(netG, OptimizerG, filename=CHECKPOINT_GEN)
+        save_checkpoint(netD, OptimizerD, filename=CHECKPOINT_DISC)
+    if epoch%2==0:
+        save_some_examples(netG, val_dl, epoch, folder="evaluation") """
 
-Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
-
-
-# ----------
-#  Training
-# ----------
 
 for epoch in range(n_epochs):
-    for i, (imgs, _) in enumerate(dataloader):
+        for i, (imgs, _) in enumerate(dataloader):
 
-        sat = F.interpolate(imgs[:, :, :, :512],
-                            size=(img_size, img_size))
-        plan = F.interpolate(imgs[:, :, :, 512:],
-                                size=(img_size, img_size))
+            sat = F.interpolate(imgs[:, :, :, :512],
+                                size=(image_size, image_size)).cuda()
+            plan = F.interpolate(imgs[:, :, :, 512:],
+                                 size=(image_size, image_size)).cuda()
 
+            # Adversarial ground truths
+            valid = Variable(Tensor(imgs.shape[0], 1).fill_(
+                1.0), requires_grad=False).cuda()
+            fake = Variable(Tensor(imgs.shape[0], 1).fill_(
+                0.0), requires_grad=False).cuda()
 
-        # Adversarial ground truths
-        valid = Variable(Tensor(imgs.shape[0], 1).fill_(
-            1.0), requires_grad=False)
-        fake = Variable(Tensor(imgs.shape[0], 1).fill_(
-            0.0), requires_grad=False)
+            # Configure input
+            real_imgs = plan
 
-        # Configure input
-        real_imgs = plan
+            ############## Train Discriminateur ##############
+            #with torch.cuda.amp.autocast():
+            y_fake = netG(sat)
+            D_real = netD(sat, real_imgs)
+            D_real_loss = BCE_Loss(D_real, torch.ones_like(D_real))
+            D_fake = netD(sat,y_fake.detach())
+            D_fake_loss = BCE_Loss(D_fake, torch.zeros_like(D_fake))
+            D_loss = (D_real_loss + D_fake_loss)/2
 
-        # ---------------------
-        #  Train discriminateur
-        # ---------------------
+            netD.zero_grad()
+            Dis_loss.append(D_loss.item())
+            D_loss.backward()
+            #D_Scaler.scale(D_loss).backward()
+            OptimizerD.step()
+            #D_Scaler.step(OptimizerD)
+            #D_Scaler.update()
 
-        optimizer_D.zero_grad()
+            ############## Train Generateur ##############
+            #with torch.cuda.amp.autocast():
+            D_fake = netD(sat, y_fake)
+            G_fake_loss = BCE_Loss(D_fake, torch.ones_like(D_fake))
+            L1 = L1_Loss(y_fake,real_imgs) * l1_lambda
+            G_loss = G_fake_loss + L1
 
-        # Measure discriminator's ability to classify real from generated samples
-        real_loss = adversarial_loss(discriminator(real_imgs), valid)
-        fake_loss = adversarial_loss(
-            discriminator(gen_imgs.detach()), fake)
-        d_loss = (real_loss + fake_loss) / 2
-
-        d_loss.backward()
-        optimizer_D.step()
-
-        print(
-            "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-            % (epoch, n_epochs, i, len(dataloader), d_loss.item(), g_loss.item())
-        )
-
-        # Sauvegarder l'image
-        # save_image(concatenated_images,
-        #            f'gen_images/concatenated_image{epoch}-{i} .jpg')
-
-        batches_done = epoch * len(dataloader) + i
-        if batches_done % sample_interval == 0:
-            concatenated_images = torch.cat(
-                (gen_imgs[:-5], sat[:-5], real_imgs[:-5]), dim=2)
-
-            save_image(concatenated_images, "images/%d.png" %
-                        batches_done, nrow=5, normalize=True)
-
-        # -----------------
-        #  Train générateur
-        # -----------------
-
-        optimizer_G.zero_grad()
-
-        # Generate a batch of images
-        gen_imgs = generator(sat)
-
-        # Loss measures generator's ability to fool the discriminator
-        g_loss = adversarial_loss(discriminator(gen_imgs), valid)
-
-        g_loss.backward()
-        optimizer_G.step()
+            OptimizerG.zero_grad()
+            Gen_loss.append(G_loss.item())
+            G_loss.backward()
+            #G_Scaler.scale(G_loss).backward()
+            #G_Scaler.step(OptimizerG)
+            OptimizerG.step()
+            #G_Scaler.update()
 
 
-    torch.save(generator.state_dict(),
-                f'models_checkpoint/generator.pth')
-    torch.save(discriminator.state_dict(),
-                f'models_checkpoint/discriminator.pth')
+            print(
+               "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+                % (epoch+1, n_epochs, i+1, len(dataloader), D_loss.item(), G_loss.item())
+            )
+
+            batches_done = epoch * len(dataloader) + i
+            if batches_done % sample_interval == 0:
+                concatenated_images = torch.cat(
+                    (y_fake[:-5], sat[:-5], real_imgs[:-5]), dim=2)
+
+                save_image(concatenated_images, "images/%d.png" %
+                       batches_done, nrow=5, normalize=True)

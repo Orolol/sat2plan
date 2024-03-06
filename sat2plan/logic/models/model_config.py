@@ -10,7 +10,6 @@ class Configuration:
         self.val_dir = "./maps/val"
 
         self.learning_rate = 2e-4
-
         self.beta1 = 0.5
         self.beta2 = 0.999
 

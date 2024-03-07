@@ -14,12 +14,7 @@ from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
 
 from sat2plan.scripts.flow import save_results, save_model
 
-<<<<<<< Updated upstream:sat2plan/logic/models/unet/model_training_class.py
-
-class Model_Training():
-=======
 class Unet():
->>>>>>> Stashed changes:sat2plan/logic/models/unet/unet.py
 
     def __init__(self, data_bucket='data-1k'):
         # Import des paramètres globaux
@@ -54,12 +49,8 @@ class Unet():
         self.beta1 = M_CFG.beta1
         self.beta2 = M_CFG.beta2
 
-<<<<<<< Updated upstream:sat2plan/logic/models/unet/model_training_class.py
-        self.M_CFG = M_CFG
-=======
         # Loading Data
         self.dataloading()
->>>>>>> Stashed changes:sat2plan/logic/models/unet/unet.py
 
         # Création des models, optimizers, losses
         self.create_models()
@@ -70,8 +61,6 @@ class Unet():
     # Load datasets from train/val directories
     def dataloading(self):
 
-<<<<<<< Updated upstream:sat2plan/logic/models/unet/model_training_class.py
-=======
         os.makedirs("images", exist_ok=True)
         os.makedirs("data", exist_ok=True)
 
@@ -87,7 +76,6 @@ class Unet():
 
         return
 
->>>>>>> Stashed changes:sat2plan/logic/models/unet/unet.py
     # Create models, optimizers ans losses
 
     def create_models(self):
@@ -110,30 +98,10 @@ class Unet():
         self.L1_Loss = nn.L1Loss()
         self.Gen_loss = []
         self.Dis_loss = []
-<<<<<<< Updated upstream:sat2plan/logic/models/unet/model_training_class.py
-        return
-
-    # Load datasets from train/val directories
-    def dataloading(self):
-
-        os.makedirs("images", exist_ok=True)
-        os.makedirs("data", exist_ok=True)
-
-        self.train_dataset = Satellite2Map_Data(root=self.train_dir)
-        self.train_dl = DataLoader(self.train_dataset, batch_size=self.batch_size,
-                                   shuffle=True, pin_memory=True, num_workers=self.num_workers)
-        print("Train Data Loaded")
-
-        self.val_dataset = Satellite2Map_Data(root=self.val_dir)
-        self.val_dl = DataLoader(self.val_dataset, batch_size=self.batch_size,
-                                 shuffle=True, pin_memory=True, num_workers=self.num_workers)
-        print("Validation Data Loaded")
-=======
         self.val_Dis_loss = []
         self.val_Gen_loss = []
         self.val_Gen_fake_loss = []
         self.val_Gen_L1_loss = []
->>>>>>> Stashed changes:sat2plan/logic/models/unet/unet.py
 
         return
 

@@ -39,10 +39,11 @@ def save_results(params: dict, metrics: dict) -> None:
     print("✅ Results saved locally")
 
 
-def save_model(model: torch.nn.Module = None) -> None:
+def save_model(model: torch.nn.Module = None, suffix='') -> None:
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    print(os.getcwd())
-    model_path = os.path.join(LOCAL_REGISTRY_PATH, "models", f"{timestamp}.pt")
+    model_path = os.path.join(
+        LOCAL_REGISTRY_PATH, "models", f"{timestamp}-{suffix}.pt")
+    os.makedirs(model_path, exist_ok=True)
     torch.save(model.state_dict(), model_path)
 
     print("✅ Model saved locally")

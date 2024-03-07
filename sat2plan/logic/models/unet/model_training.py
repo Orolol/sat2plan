@@ -81,7 +81,9 @@ def train_model(data_bucket='data-1k'):
 
     for epoch in range(n_epochs):
         for idx, (x, y) in enumerate(train_dl):
-            print(f"Batch : {idx+1}/{len(train_dl)}")
+            if cuda:
+                x = x .cuda()
+                y = y.cuda()
 
             ############## Train Discriminator ##############
 
@@ -112,10 +114,6 @@ def train_model(data_bucket='data-1k'):
             OptimizerG.zero_grad()
             G_loss.backward()
             OptimizerG.step()
-            print(
-                "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                % (epoch+1, n_epochs, idx+1, len(train_dl), D_loss.item(), G_loss.item())
-            )
 
             batches_done = epoch * len(train_dl) + idx
             if batches_done % sample_interval == 0:
@@ -124,10 +122,13 @@ def train_model(data_bucket='data-1k'):
 
                 save_image(concatenated_images, "images/%d.png" %
                            batches_done, nrow=3, normalize=True)
-
+        print(
+            "[Epoch %d/%d] [D loss: %f] [G loss: %f]"
+            % (epoch+1, n_epochs, D_loss.item(), G_loss.item())
+        )
         if save_model_bool and (epoch+1) % 5 == 0:
-            save_model(netG)
-            save_model(netD)
+            save_model(netG, suffix=f"-{epoch}-G")
+            save_model(netD, suffix=f"-{epoch}-D")
             save_results(params=CFG, metrics=dict(
                 Gen_loss=Gen_loss, Dis_loss=Dis_loss))
     save_results(params=CFG, metrics=dict(

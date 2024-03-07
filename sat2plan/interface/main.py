@@ -14,7 +14,7 @@ from sat2plan.logic.models.unet.unet import Unet
 def train_unet():
 
     data_bucket = 'data-1k'
-    export_params_txt()
+    # export_params_txt()
 
     print(Fore.YELLOW + "Training unet" + Style.RESET_ALL)
     download_bucket_folder(data_bucket, val_size=0.1)

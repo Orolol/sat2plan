@@ -1,7 +1,7 @@
 import os
 import json
 import getpass
-from sat2plan.logic.models.unet.model_config import Configuration
+from sat2plan.logic.models.unet.global_config import Global_Configuration
 
 def export_params_txt():
     """
@@ -23,34 +23,34 @@ def export_params_txt():
     fichier.write(f"MODELE: UNET\n")
 
     # Mode de calcul
-    fichier.write(f"DEVICE: {Configuration().device}\n")
-    fichier.write(f"TRAIN_DIR: {Configuration().train_dir}\n")
-    fichier.write(f"VAL_DIR: {Configuration().val_dir}\n")
+    fichier.write(f"DEVICE: {Global_Configuration().device}\n")
+    fichier.write(f"TRAIN_DIR: {Global_Configuration().train_dir}\n")
+    fichier.write(f"VAL_DIR: {Global_Configuration().val_dir}\n")
 
     # Hyperparamètres
-    fichier.write(f"LEARNING_RATE: {Configuration().learning_rate}\n")
-    fichier.write(f"BETA 1: {Configuration().beta1}\n")
-    fichier.write(f"BETA 2: {Configuration().beta2}\n")
-    fichier.write(f"NB CPU: {Configuration().n_cpu}\n")
-    fichier.write(f"BATCH_SIZE: {Configuration().batch_size}\n")
-    fichier.write(f"NB_EPOCHS: {Configuration().n_epochs}\n")
-    fichier.write(f"SAMPLE_INTERVAL: {Configuration().sample_interval}\n")
-    fichier.write(f"IMAGE_SIZE: {Configuration().image_size}\n")
-    fichier.write(f"CHANNELS_IMG: {Configuration().channels_img}\n")
-    fichier.write(f"STRIDE: {Configuration().stride}\n")
-    fichier.write(f"PADDING: {Configuration().padding}\n")
-    fichier.write(f"KERNEL_SIZE: {Configuration().kernel_size}\n")
-    fichier.write(f"NB_WORKERS: {Configuration().num_workers}\n")
-    fichier.write(f"L1_LAMBDA: {Configuration().l1_lambda}\n")
-    fichier.write(f"LAMBDA_GP: {Configuration().lambda_gp}\n")
+    fichier.write(f"LEARNING_RATE: {Global_Configuration().learning_rate}\n")
+    fichier.write(f"BETA 1: {Global_Configuration().beta1}\n")
+    fichier.write(f"BETA 2: {Global_Configuration().beta2}\n")
+    fichier.write(f"NB CPU: {Global_Configuration().n_cpu}\n")
+    fichier.write(f"BATCH_SIZE: {Global_Configuration().batch_size}\n")
+    fichier.write(f"NB_EPOCHS: {Global_Configuration().n_epochs}\n")
+    fichier.write(f"SAMPLE_INTERVAL: {Global_Configuration().sample_interval}\n")
+    fichier.write(f"IMAGE_SIZE: {Global_Configuration().image_size}\n")
+    fichier.write(f"CHANNELS_IMG: {Global_Configuration().channels_img}\n")
+    fichier.write(f"STRIDE: {Global_Configuration().stride}\n")
+    fichier.write(f"PADDING: {Global_Configuration().padding}\n")
+    fichier.write(f"KERNEL_SIZE: {Global_Configuration().kernel_size}\n")
+    fichier.write(f"NB_WORKERS: {Global_Configuration().num_workers}\n")
+    fichier.write(f"L1_LAMBDA: {Global_Configuration().l1_lambda}\n")
+    fichier.write(f"LAMBDA_GP: {Global_Configuration().lambda_gp}\n")
 
     # Sauvegarde modèle
-    fichier.write(f"CHARGEMENT_MODELE: {Configuration().load_model}\n")
-    fichier.write(f"SAUVEGARDE_MODELE: {Configuration().save_model}\n")
+    fichier.write(f"CHARGEMENT_MODELE: {Global_Configuration().load_model}\n")
+    fichier.write(f"SAUVEGARDE_MODELE: {Global_Configuration().save_model}\n")
 
     # Fichiers
-    fichier.write(f"CHECKPOINT_DISC: {Configuration().checkpoint_disc}\n")
-    fichier.write(f"CHECKPOINT_GEN: {Configuration().checkpoint_gen}\n")
+    fichier.write(f"CHECKPOINT_DISC: {Global_Configuration().checkpoint_disc}\n")
+    fichier.write(f"CHECKPOINT_GEN: {Global_Configuration().checkpoint_gen}\n")
     fichier.close()
     pass
 

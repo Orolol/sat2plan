@@ -50,6 +50,8 @@ class Model_Training():
         self.beta1 = M_CFG.beta1
         self.beta2 = M_CFG.beta2
 
+        self.M_CFG = M_CFG
+
         # Création des models, optimizers, losses
         self.create_models()
 

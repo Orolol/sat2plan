@@ -106,7 +106,7 @@ class Model_Training():
         for epoch in range(self.n_epochs):
             for idx, (x, y) in enumerate(self.train_dl):
 
-                if cuda:
+                if self.cuda:
                     x = x .cuda()
                     y = y.cuda()
 
@@ -153,8 +153,10 @@ class Model_Training():
                                batches_done, nrow=3, normalize=True)
 
             if self.save_model_bool and (epoch+1) % 5 == 0:
-                save_model(self.netG)
-                save_model(self.netD)
+                save_model(self.netG, optimizer=self.OptimizerG,
+                           suffix=f"-{epoch}-G")
+                save_model(self.netD, optimizer=self.OptimizerD,
+                           suffix=f"-{epoch}-D")
                 save_results(params=self.M_CFG, metrics=dict(
                     Gen_loss=self.Gen_loss, Dis_loss=self.Dis_loss))
 

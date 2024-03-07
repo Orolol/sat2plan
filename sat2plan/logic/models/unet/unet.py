@@ -14,40 +14,41 @@ from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
 
 from sat2plan.scripts.flow import save_results, save_model
 
+# Modèle Unet
 class Unet():
 
     def __init__(self, data_bucket='data-1k'):
         # Import des paramètres globaux
-        G_CFG = Global_Configuration()
+        self.G_CFG = Global_Configuration()
 
-        self.n_cpu = G_CFG.n_cpu
+        self.n_cpu = self.G_CFG.n_cpu
 
-        self.device = G_CFG.device
-        self.train_dir = f"{G_CFG.train_dir}/{data_bucket}"
-        self.val_dir = f"{G_CFG.val_dir}/{data_bucket}"
+        self.device = self.G_CFG.device
+        self.train_dir = f"{self.G_CFG.train_dir}/{data_bucket}"
+        self.val_dir = f"{self.G_CFG.val_dir}/{data_bucket}"
 
-        self.image_size = G_CFG.image_size
+        self.image_size = self.G_CFG.image_size
 
-        self.batch_size = G_CFG.batch_size
-        self.n_epochs = G_CFG.n_epochs
-        self.sample_interval = G_CFG.sample_interval
+        self.batch_size = self.G_CFG.batch_size
+        self.n_epochs = self.G_CFG.n_epochs
+        self.sample_interval = self.G_CFG.sample_interval
 
-        self.num_workers = G_CFG.num_workers
-        self.l1_lambda = G_CFG.l1_lambda
-        self.lambda_gp = G_CFG.lambda_gp
+        self.num_workers = self.G_CFG.num_workers
+        self.l1_lambda = self.G_CFG.l1_lambda
+        self.lambda_gp = self.G_CFG.lambda_gp
 
-        self.load_model = G_CFG.load_model
-        self.save_model_bool = G_CFG.save_model
+        self.load_model = self.G_CFG.load_model
+        self.save_model_bool = self.G_CFG.save_model
 
-        self.checkpoint_disc = G_CFG.checkpoint_disc
-        self.checkpoint_gen = G_CFG.checkpoint_gen
+        self.checkpoint_disc = self.G_CFG.checkpoint_disc
+        self.checkpoint_gen = self.G_CFG.checkpoint_gen
 
         # Import des hyperparamètres du modèle
-        M_CFG = Model_Configuration()
+        self.M_CFG = Model_Configuration()
 
-        self.learning_rate = M_CFG.learning_rate
-        self.beta1 = M_CFG.beta1
-        self.beta2 = M_CFG.beta2
+        self.learning_rate = self.M_CFG.learning_rate
+        self.beta1 = self.M_CFG.beta1
+        self.beta2 = self.M_CFG.beta2
 
         # Loading Data
         self.dataloading()

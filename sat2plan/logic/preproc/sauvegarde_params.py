@@ -65,7 +65,7 @@ def ouverture_fichier_json(nom):
     """
     Création d'un fichier json avec nom au choix
     """
-    fichier = open(f"{nom}.json", "w")
+    fichier = open(f"{nom}.json", mode="w",encoding='UTF-8')
     return fichier
 
 
@@ -92,18 +92,12 @@ def export_loss(fichier, epoch, batch, loss_l1, loss_g, loss_d, configuration):
         "Device": configuration.device,
         "Train_dir": configuration.train_dir,
         "Val_dir": configuration.val_dir,
-        "Learning_rate": configuration.learning_rate,
-        "Beta_1": configuration.beta1,
-        "Beta_2": configuration.beta2,
         "N_cpu": configuration.n_cpu,
         "Batch_size": configuration.batch_size,
         "N_epochs": configuration.n_epochs,
         "Sample_interval": configuration.sample_interval,
         "Image_size": configuration.image_size,
         "Channels_img": configuration.channels_img,
-        "Stride": configuration.stride,
-        "Padding": configuration.padding,
-        "Kernel_size": configuration.kernel_size,
         "N_workers": configuration.num_workers,
         "L1_lambda": configuration.l1_lambda,
         "Lambda_gp": configuration.lambda_gp,
@@ -116,6 +110,7 @@ def export_loss(fichier, epoch, batch, loss_l1, loss_g, loss_d, configuration):
 
     # Mise en forme des dictionnaires dans le fichier
     json_object = json.dumps(dictionary, indent=4)
+
 
     # Écriture dans le fichier .json
     fichier.write(json_object)

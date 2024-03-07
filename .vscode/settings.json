@@ -1,0 +1,4 @@
+{
+  "terminal.integrated.gpuAcceleration": "on",
+  "terminal.integrated.enableImages": true
+}

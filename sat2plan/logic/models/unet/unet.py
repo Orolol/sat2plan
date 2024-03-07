@@ -17,12 +17,8 @@ from sat2plan.scripts.flow import save_results, save_model, load_model
 from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, export_loss
 # Modèle Unet
 
-# Création du fichier params.json
-params_json = ouverture_fichier_json("params")
-
 
 class Unet():
-
     def __init__(self, data_bucket='data-1k'):
 
         # Import des paramètres globaux
@@ -120,6 +116,9 @@ class Unet():
 
     # Train & save models
     def train(self):
+        # Création du fichier params.json
+        params_json = open("params.json", mode="w",encoding='UTF-8')
+
         for epoch in range(self.n_epochs):
             for idx, (x, y) in enumerate(self.train_dl):
 
@@ -191,6 +190,8 @@ class Unet():
         save_results(params=self.M_CFG, metrics=dict(
             Gen_loss=G_loss, Dis_loss=D_loss))
 
+        params_json.close()
+
         return
 
     # Test du modèle sur le set de validation
@@ -224,13 +225,9 @@ class Unet():
             G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
             G_L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
             G_loss = G_fake_loss + G_L1
-            
-            sum_G_fake_loss += G_fake_loss.item()
-            sum_G_L1_loss += G_L1.item()
-            sum_G_loss += G_loss.item()
 
-        # Ajout des losses
-        self.val_Dis_loss.append(sum_D_loss/len(self.val_dl))
-        self.val_Gen_loss.append(sum_G_loss/len(self.val_dl))
-        self.val_Gen_fake_loss.append(sum_G_fake_loss/len(self.val_dl))
-        self.val_Gen_L1_loss.append(sum_G_L1_loss/len(self.val_dl))
+
+            self.val_Gen_loss.append(G_loss.item())
+            self.val_Gen_fake_loss.append(G_fake_loss.item())
+            self.val_Gen_L1_loss.append(G_L1.item())
+

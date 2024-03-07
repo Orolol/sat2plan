@@ -7,7 +7,7 @@ from dateutil.parser import parse
 
 from sat2plan.logic.preproc.data import download_bucket_folder
 #from sat2plan.logic.models.unet.model_training import train_model
-from sat2plan.logic.models.unet.model_training_class import Unet
+from sat2plan.logic.models.unet.unet import Unet
 
 
 # @mlflow_run

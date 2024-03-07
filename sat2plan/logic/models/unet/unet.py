@@ -221,6 +221,7 @@ class Unet():
             sum_G_L1_loss += G_L1.item()
             sum_G_loss += G_loss.item()
 
+        # Ajout des losses
         self.val_Dis_loss.append(sum_D_loss/len(self.val_dl))
         self.val_Gen_loss.append(sum_G_loss/len(self.val_dl))
         self.val_Gen_fake_loss.append(sum_G_fake_loss/len(self.val_dl))

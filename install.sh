@@ -19,6 +19,7 @@ sudo apt-get -y install cuda-toolkit-12-4 cuda nvidia-cuda-toolkit
 # Installation de PyTorch avec CUDA 11.1
 pip3 install --upgrade pip
 pip3 install . 
+pip install --upgrade numpy
 
 cp .env.sample .env
 

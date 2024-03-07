@@ -15,15 +15,17 @@ from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
+device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
 
 def weights_init_normal(m):
     classname = m.__class__.__name__
     if classname.find("Conv") != -1:
-        torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
+        torch.nn.init.normal_(m.weight.data, 0.0, 0.02).to(device)
     elif classname.find("BatchNorm2d") != -1:
-        torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
-        torch.nn.init.constant_(m.bias.data, 0.0)
+        torch.nn.init.normal_(m.weight.data, 1.0, 0.02).to(device)
+        torch.nn.init.constant_(m.bias.data, 0.0).to(device)
 
 
 class Generator(nn.Module):
@@ -55,6 +57,7 @@ class Generator(nn.Module):
     def forward(self, z):
         # print("Z", z.shape)
         # out = self.l1(z)
+        # print(self.l1(z))
         # out = z.view(z.shape[0], 128, self.init_size, self.init_size)
         # print("OUT", z.shape)
         img = self.conv_blocks(z)
@@ -110,16 +113,17 @@ def run_dcgan():
     sample_interval = 10
     from_scratch = True
 
-    cuda = True if torch.cuda.is_available() else False
+    # cuda = True if torch.cuda.is_available() else False
 
-    cuda = True if torch.cuda.is_available() else False
+    # device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
 
     # Loss function
     adversarial_loss = torch.nn.BCELoss()
 
     # Initialize generator and discriminator
-    generator = Generator(img_size=img_size)
-    discriminator = Discriminator(img_size=img_size)
+    generator = Generator(img_size=img_size).to(device)
+    discriminator = Discriminator(img_size=img_size).to(device)
+
     if not from_scratch:
 
         generator_files = glob.glob('models_checkpoint/generator_*.pth')
@@ -135,10 +139,10 @@ def run_dcgan():
         if discriminator_files:
             discriminator.load_state_dict(torch.load(discriminator_files[0]))
 
-    if cuda:
-        generator.cuda()
-        discriminator.cuda()
-        adversarial_loss.cuda()
+    # if cuda:
+    #     generator.cuda()
+    #     discriminator.cuda()
+    #     adversarial_loss.cuda()
 
     # Initialize weights
     generator.apply(weights_init_normal)
@@ -146,14 +150,13 @@ def run_dcgan():
 
     # Configure data loader
     dataloader = torch.utils.data.DataLoader(
-        datasets.ImageFolder("sat2plan/data", transform=transforms.Compose([
+        datasets.ImageFolder("data/data-1k", transform=transforms.Compose([
             # transforms.Resize(256),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])),
         batch_size=batch_size,
         shuffle=True,
-
     )
 
     # Optimizers
@@ -162,7 +165,7 @@ def run_dcgan():
     optimizer_D = torch.optim.Adam(
         discriminator.parameters(), lr=lr, betas=(b1, b2))
 
-    Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
+    Tensor = torch.cuda.FloatTensor if (torch.cuda.is_available()) else torch.FloatTensor
 
     # ----------
     #  Training
@@ -172,20 +175,18 @@ def run_dcgan():
         for i, (imgs, _) in enumerate(dataloader):
 
             sat = F.interpolate(imgs[:, :, :, :512],
-                                size=(img_size, img_size))
+                                size=(img_size, img_size)).to(device)
             plan = F.interpolate(imgs[:, :, :, 512:],
-                                 size=(img_size, img_size))
+                                 size=(img_size, img_size)).to(device)
 
-            # plt.imshow(plan[0].permute(1, 2, 0))
-            # plt.show()
             # plt.imshow(sat[0].permute(1, 2, 0))
             # plt.show()
 
             # Adversarial ground truths
             valid = Variable(Tensor(imgs.shape[0], 1).fill_(
-                1.0), requires_grad=False)
+                1.0), requires_grad=False).to(device)
             fake = Variable(Tensor(imgs.shape[0], 1).fill_(
-                0.0), requires_grad=False)
+                0.0), requires_grad=False).to(device)
 
             # Configure input
             real_imgs = plan
@@ -198,6 +199,7 @@ def run_dcgan():
 
             # Generate a batch of images
             gen_imgs = generator(sat)
+
 
             # Loss measures generator's ability to fool the discriminator
             g_loss = adversarial_loss(discriminator(gen_imgs), valid)

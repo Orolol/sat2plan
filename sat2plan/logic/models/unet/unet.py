@@ -15,6 +15,8 @@ from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
 # Modèle Unet
+
+
 class Unet():
 
     def __init__(self, data_bucket='data-1k'):
@@ -67,12 +69,12 @@ class Unet():
 
         self.train_dataset = Satellite2Map_Data(root=self.train_dir)
         self.train_dl = DataLoader(self.train_dataset, batch_size=self.batch_size,
-                            shuffle=True, pin_memory=True, num_workers=self.num_workers)
+                                   shuffle=True, pin_memory=True, num_workers=self.num_workers)
         print("Train Data Loaded")
 
         self.val_dataset = Satellite2Map_Data(root=self.val_dir)
         self.val_dl = DataLoader(self.val_dataset, batch_size=self.batch_size,
-                            shuffle=True, pin_memory=True, num_workers=self.num_workers)
+                                 shuffle=True, pin_memory=True, num_workers=self.num_workers)
         print("Validation Data Loaded")
 
         return
@@ -158,10 +160,8 @@ class Unet():
                 batches_done = epoch * len(self.train_dl) + idx
 
             if self.save_model_bool and (epoch+1) % 5 == 0:
-                save_model(self.netG, optimizer=self.OptimizerG,
-                           suffix=f"-{epoch}-G")
-                save_model(self.netD, optimizer=self.OptimizerD,
-                           suffix=f"-{epoch}-D")
+                save_model({"gen": self.netG, "disc": self.netD}, {
+                    "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
                 save_results(params=self.M_CFG, metrics=dict(
                     Gen_loss=G_loss, Dis_loss=D_loss))
                 concatenated_images = torch.cat(
@@ -174,8 +174,10 @@ class Unet():
                 print("-- Test de validation --")
                 self.validation()
                 print(f"Epoch : {epoch+1}/{self.n_epochs} :")
-                print(f"Validation Discriminator Loss : {self.val_Dis_loss[-1]}")
-                print(f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
+                print(
+                    f"Validation Discriminator Loss : {self.val_Dis_loss[-1]}")
+                print(
+                    f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
                 print("------------------------")
 
         save_results(params=self.M_CFG, metrics=dict(

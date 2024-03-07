@@ -179,7 +179,7 @@ class Unet():
                         (x[:-1], y_fake[:-1], y[:-1]), dim=2)
 
                     save_image(concatenated_images, "images/%d.png" %
-                            batches_done, nrow=3, normalize=True)
+                               epoch, nrow=3, normalize=True)
 
         save_results(params=self.M_CFG, metrics=dict(
             Gen_loss=G_loss, Dis_loss=D_loss))

@@ -14,6 +14,7 @@ from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
 
 from sat2plan.scripts.flow import save_results, save_model
 
+# Modèle Unet
 class Unet():
 
     def __init__(self, data_bucket='data-1k'):

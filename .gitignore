@@ -168,3 +168,4 @@ data/
 models_checkpoints/
 checkpoints/
 images/
+*.png

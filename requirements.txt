@@ -9,3 +9,5 @@ scipy
 colorama
 google-cloud-storage
 mlflow
+python-dotenv
+albumentations

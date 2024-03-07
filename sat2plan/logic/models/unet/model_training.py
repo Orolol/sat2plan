@@ -83,6 +83,10 @@ def train_model(data_bucket='data-1k'):
         for idx, (x, y) in enumerate(train_dl):
             print(f"Batch : {idx+1}/{len(train_dl)}")
 
+            if cuda:
+                x = x .cuda()
+                y = y.cuda()
+
             ############## Train Discriminator ##############
 
             # Measure discriminator's ability to classify real from generated samples
@@ -118,12 +122,12 @@ def train_model(data_bucket='data-1k'):
             )
 
             batches_done = epoch * len(train_dl) + idx
-            if batches_done % sample_interval == 0:
-                concatenated_images = torch.cat(
-                    (x[:-1], y_fake[:-1], y[:-1]), dim=2)
+            # if batches_done % sample_interval == 0:
+            #     concatenated_images = torch.cat(
+            #         (x[:-1], y_fake[:-1], y[:-1]), dim=2)
 
-                save_image(concatenated_images, "images/%d.png" %
-                           batches_done, nrow=3, normalize=True)
+            #     save_image(concatenated_images, "images/%d.png" %
+            #                batches_done, nrow=3, normalize=True)
 
         if save_model_bool and (epoch+1) % 5 == 0:
             save_model(netG)

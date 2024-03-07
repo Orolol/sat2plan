@@ -1,6 +1,13 @@
 from google.cloud import storage
 import os
 from sat2plan.scripts.params import BUCKET_NAME
+from concurrent.futures import ThreadPoolExecutor
+
+
+def download_file(blob, file_path):
+    if not os.path.exists(file_path):
+        blob.download_to_filename(file_path)
+        print(f"Downloaded {file_path} from bucket {BUCKET_NAME}")
 
 
 def download_bucket_folder(folder_name, val_size=0):
@@ -15,16 +22,16 @@ def download_bucket_folder(folder_name, val_size=0):
     storage_client = storage.Client.create_anonymous_client()
     bucket = storage_client.bucket(BUCKET_NAME)
     blobs = bucket.list_blobs(prefix=folder_name)
-    for idx, blob in enumerate(blobs):
-        if val_size == 0:
-            file_path = os.path.join(destination_folder, blob.name)
-        else:
-            if idx % 10 > 10*val_size:
-                file_path = os.path.join(
-                    destination_folder, 'split/train', blob.name)
+
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        for idx, blob in enumerate(blobs):
+            if val_size == 0:
+                file_path = os.path.join(destination_folder, blob.name)
             else:
-                file_path = os.path.join(
-                    destination_folder, 'split/val', blob.name)
-        if not os.path.exists(file_path):
-            blob.download_to_filename(file_path)
-            print(f"Downloaded {file_path} from bucket {BUCKET_NAME}")
+                if idx % 10 > 10*val_size:
+                    file_path = os.path.join(
+                        destination_folder, 'split/train', blob.name)
+                else:
+                    file_path = os.path.join(
+                        destination_folder, 'split/val', blob.name)
+            executor.submit(download_file, blob, file_path)

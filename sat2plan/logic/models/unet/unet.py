@@ -224,10 +224,13 @@ class Unet():
             G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
             G_L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
             G_loss = G_fake_loss + G_L1
+            
+            sum_G_fake_loss += G_fake_loss.item()
+            sum_G_L1_loss += G_L1.item()
+            sum_G_loss += G_loss.item()
 
-            self.val_Gen_loss.append(G_loss.item())
-            self.val_Gen_fake_loss.append(G_fake_loss.item())
-            self.val_Gen_L1_loss.append(G_L1.item())
-
-
-params_json.close()
+        # Ajout des losses
+        self.val_Dis_loss.append(sum_D_loss/len(self.val_dl))
+        self.val_Gen_loss.append(sum_G_loss/len(self.val_dl))
+        self.val_Gen_fake_loss.append(sum_G_fake_loss/len(self.val_dl))
+        self.val_Gen_L1_loss.append(sum_G_L1_loss/len(self.val_dl))

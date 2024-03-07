@@ -127,8 +127,8 @@ def train_model(data_bucket='data-1k'):
             % (epoch+1, n_epochs, D_loss.item(), G_loss.item())
         )
         if save_model_bool and (epoch+1) % 5 == 0:
-            save_model(netG, OptimizerG, suffix=f"-{epoch}-G")
-            save_model(netD, OptimizerD, suffix=f"-{epoch}-D")
+            save_model({"gen": netG, "disc": netD}, {
+                       "gen_opt": OptimizerG, "gen_disc": OptimizerD}, suffix=f"-{epoch}-G")
             save_results(params=CFG, metrics=dict(
                 Gen_loss=Gen_loss, Dis_loss=Dis_loss))
     save_results(params=CFG, metrics=dict(

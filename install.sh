@@ -23,5 +23,7 @@ cd sat2plan
 pip3 install --upgrade pip
 pip3 install . 
 
+cp .env.sample .env
+
 # Vérification de l'installation
 python3 -c "import torch; print(torch.cuda.is_available())"

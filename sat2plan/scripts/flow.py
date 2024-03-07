@@ -23,13 +23,15 @@ def save_results(params: dict, metrics: dict) -> None:
         print("✅ Results saved on MLflow")
 
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-
+    os.makedirs(os.path.join(
+        LOCAL_REGISTRY_PATH, "params"), exist_ok=True)
     if params is not None:
         params_path = os.path.join(
             LOCAL_REGISTRY_PATH, "params", timestamp + ".pickle")
         with open(params_path, "wb") as file:
             pickle.dump(params, file)
-
+    os.makedirs(os.path.join(
+        LOCAL_REGISTRY_PATH, "metrics"), exist_ok=True)
     if metrics is not None:
         metrics_path = os.path.join(
             LOCAL_REGISTRY_PATH, "metrics", timestamp + ".pickle")
@@ -39,18 +41,18 @@ def save_results(params: dict, metrics: dict) -> None:
     print("✅ Results saved locally")
 
 
-def save_model(model: torch.nn.Module = None, optimizer=None, suffix='') -> None:
+def save_model(models: torch.nn.Module = None, optimizers=None, suffix='') -> None:
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     model_path = os.path.join(
         LOCAL_REGISTRY_PATH, "models", f"{timestamp}-{suffix}.pt")
     print("=> Saving checkpoint")
-    # model = {
-    #     "state_dict": model.state_dict(),
-    #     # "optimizer": optimizer.state_dict(),
-    # }
+    model = {
+        "state_dict": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+    }
     os.makedirs(os.path.join(
         LOCAL_REGISTRY_PATH, "models"), exist_ok=True)
-    torch.save(model.state_dict(), model_path)
+    torch.save(model, model_path)
 
     print("✅ Model saved locally")
 

@@ -15,9 +15,14 @@ from sat2plan.scripts.flow import save_results, save_model, mlflow_run
 
 from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
 
+from sat2plan.logic.preproc.sauvegarde_params import export_loss, ouverture_fichier_json
 
 # @mlflow_run
 def train_model(data_bucket='data-1k'):
+
+    # Ouverture du fichier de paramètres sous format json
+    fichier_loss = ouverture_fichier_json("params")
+
     # Import des hyperparamètres
     CFG = Configuration()
 
@@ -117,6 +122,9 @@ def train_model(data_bucket='data-1k'):
                 % (epoch+1, n_epochs, idx+1, len(train_dl), D_loss.item(), G_loss.item())
             )
 
+            # Export des paramètres dans le fichier params.json
+            export_loss(fichier_loss,epoch+1,idx+1,L1.item(),G_loss.item(),D_loss.item(),CFG)
+
             batches_done = epoch * len(train_dl) + idx
             if batches_done % sample_interval == 0:
                 concatenated_images = torch.cat(
@@ -132,3 +140,6 @@ def train_model(data_bucket='data-1k'):
                 Gen_loss=Gen_loss, Dis_loss=Dis_loss))
     save_results(params=CFG, metrics=dict(
         Gen_loss=Gen_loss, Dis_loss=Dis_loss))
+
+    # Fermeture du fichier params.json
+    fichier_loss.close()

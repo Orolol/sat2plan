@@ -16,7 +16,7 @@ class Configuration:
 
         self.n_cpu = 6
 
-        self.batch_size = 8
+        self.batch_size = 64
         self.n_epochs = 200
         self.sample_interval = 10
 

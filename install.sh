@@ -16,9 +16,6 @@ sudo cp /var/cuda-repo-ubuntu2004-12-4-local/cuda-*-keyring.gpg /usr/share/keyri
 sudo apt-get update
 sudo apt-get -y install cuda-toolkit-12-4 cuda nvidia-cuda-toolkit
 
-git clone https://github.com/Orolol/sat2plan.git
-cd sat2plan
-
 # Installation de PyTorch avec CUDA 11.1
 pip3 install --upgrade pip
 pip3 install . 

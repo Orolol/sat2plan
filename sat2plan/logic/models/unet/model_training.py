@@ -10,7 +10,7 @@ from torch.autograd import Variable
 from torchvision.utils import save_image
 
 from sat2plan.logic.models.unet.model_building import Generator, Discriminator
-from sat2plan.logic.models.unet.model_config import Configuration
+from sat2plan.logic.models.unet.model_config import Model_Configuration
 from sat2plan.scripts.flow import save_results, save_model, mlflow_run
 
 from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
@@ -19,7 +19,7 @@ from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
 # @mlflow_run
 def train_model(data_bucket='data-1k'):
     # Import des hyperparamètres
-    CFG = Configuration()
+    CFG = Model_Configuration()
 
     device = CFG.device
     train_dir = f"{CFG.train_dir}/{data_bucket}"

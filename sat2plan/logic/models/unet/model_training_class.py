@@ -12,7 +12,7 @@ from sat2plan.logic.models.unet.model_building import Generator, Discriminator
 
 from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
 
-from sat2plan.scripts.flow import save_results, save_model
+from sat2plan.scripts.flow import save_results, save_model, load_model
 
 
 class Model_Training():
@@ -65,6 +65,11 @@ class Model_Training():
 
     def create_models(self):
         self.cuda = True if torch.cuda.is_available() else False
+        if self.load_model:
+            model_and_optimizer = load_model()
+            self.netG = model_and_optimizer['model']
+            self.OptimizerG = model_and_optimizer['optimizer']
+            print("Model loaded from MLflow")
         if self.cuda:
             print("Cuda is available")
             self.netD = Discriminator(in_channels=3).cuda()

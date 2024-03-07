@@ -4,6 +4,8 @@ import time
 import pickle
 import torch
 
+from typing import Dict
+
 from colorama import Fore, Style
 from google.cloud import storage
 
@@ -41,18 +43,21 @@ def save_results(params: dict, metrics: dict) -> None:
     print("✅ Results saved locally")
 
 
-def save_model(models: torch.nn.Module = None, optimizers=None, suffix='') -> None:
+def save_model(models: Dict[str, torch.nn.Module] = None, optimizers: Dict[str, torch.optim.Optimizer] = None, suffix='') -> None:
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     model_path = os.path.join(
         LOCAL_REGISTRY_PATH, "models", f"{timestamp}-{suffix}.pt")
     print("=> Saving checkpoint")
-    model = {
-        "state_dict": model.state_dict(),
-        "optimizer": optimizer.state_dict(),
-    }
+
+    state = {}
+    for name, model in models.items():
+        state[f"{name}_state_dict"] = model.state_dict()
+    for name, optimizer in optimizers.items():
+        state[f"{name}_optimizer_state_dict"] = optimizer.state_dict()
+
     os.makedirs(os.path.join(
         LOCAL_REGISTRY_PATH, "models"), exist_ok=True)
-    torch.save(model, model_path)
+    torch.save(state, model_path)
 
     print("✅ Model saved locally")
 
@@ -69,7 +74,7 @@ def save_model(models: torch.nn.Module = None, optimizers=None, suffix='') -> No
 
     if MODEL_TARGET == "mlflow":
         mlflow.pytorch.log_model(
-            pytorch_model=model,
+            pytorch_model=state,
             artifact_path="model",
             registered_model_name=MLFLOW_MODEL_NAME
         )

@@ -20,6 +20,7 @@ from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, exp
 # Création du fichier params.json
 params_json = ouverture_fichier_json("params")
 
+
 class Unet():
 
     def __init__(self, data_bucket='data-1k'):
@@ -161,7 +162,7 @@ class Unet():
                     % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
                 )
 
-                export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
+                # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
 
                 batches_done = epoch * len(self.train_dl) + idx
 
@@ -227,5 +228,6 @@ class Unet():
             self.val_Gen_loss.append(G_loss.item())
             self.val_Gen_fake_loss.append(G_fake_loss.item())
             self.val_Gen_L1_loss.append(G_L1.item())
+
 
 params_json.close()

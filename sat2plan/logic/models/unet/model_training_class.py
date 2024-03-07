@@ -14,6 +14,7 @@ from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
 
 from sat2plan.scripts.flow import save_results, save_model
 
+
 class Model_Training():
 
     def __init__(self, data_bucket='data-1k'):
@@ -58,8 +59,8 @@ class Model_Training():
         # Loading Data
         self.dataloading()
 
-
     # Create models, optimizers ans losses
+
     def create_models(self):
         self.cuda = True if torch.cuda.is_available() else False
         if self.cuda:
@@ -90,12 +91,12 @@ class Model_Training():
 
         self.train_dataset = Satellite2Map_Data(root=self.train_dir)
         self.train_dl = DataLoader(self.train_dataset, batch_size=self.batch_size,
-                            shuffle=True, pin_memory=True, num_workers=self.num_workers)
+                                   shuffle=True, pin_memory=True, num_workers=self.num_workers)
         print("Train Data Loaded")
 
         self.val_dataset = Satellite2Map_Data(root=self.val_dir)
         self.val_dl = DataLoader(self.val_dataset, batch_size=self.batch_size,
-                            shuffle=True, pin_memory=True, num_workers=self.num_workers)
+                                 shuffle=True, pin_memory=True, num_workers=self.num_workers)
         print("Validation Data Loaded")
 
         return
@@ -104,6 +105,10 @@ class Model_Training():
     def train(self):
         for epoch in range(self.n_epochs):
             for idx, (x, y) in enumerate(self.train_dl):
+
+                if cuda:
+                    x = x .cuda()
+                    y = y.cuda()
 
                 ############## Train Discriminator ##############
 
@@ -145,7 +150,7 @@ class Model_Training():
                         (x[:-1], y_fake[:-1], y[:-1]), dim=2)
 
                     save_image(concatenated_images, "images/%d.png" %
-                            batches_done, nrow=3, normalize=True)
+                               batches_done, nrow=3, normalize=True)
 
             if self.save_model_bool and (epoch+1) % 5 == 0:
                 save_model(self.netG)

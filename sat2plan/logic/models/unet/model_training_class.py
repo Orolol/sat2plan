@@ -147,12 +147,6 @@ class Model_Training():
                 )
 
                 batches_done = epoch * len(self.train_dl) + idx
-                if batches_done % self.sample_interval == 0:
-                    concatenated_images = torch.cat(
-                        (x[:-1], y_fake[:-1], y[:-1]), dim=2)
-
-                    save_image(concatenated_images, "images/%d.png" %
-                               batches_done, nrow=3, normalize=True)
 
             if self.save_model_bool and (epoch+1) % 5 == 0:
                 save_model(self.netG, optimizer=self.OptimizerG,
@@ -161,6 +155,11 @@ class Model_Training():
                            suffix=f"-{epoch}-D")
                 save_results(params=self.M_CFG, metrics=dict(
                     Gen_loss=self.Gen_loss, Dis_loss=self.Dis_loss))
+                concatenated_images = torch.cat(
+                    (x[:-1], y_fake[:-1], y[:-1]), dim=2)
+
+                save_image(concatenated_images, "images/%d.png" %
+                           batches_done, nrow=3, normalize=True)
 
         save_results(params=self.M_CFG, metrics=dict(
             Gen_loss=self.Gen_loss, Dis_loss=self.Dis_loss))

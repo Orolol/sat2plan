@@ -154,7 +154,7 @@ class Model_Training():
                 save_model(self.netD, optimizer=self.OptimizerD,
                            suffix=f"-{epoch}-D")
                 save_results(params=self.M_CFG, metrics=dict(
-                    Gen_loss=self.Gen_loss, Dis_loss=self.Dis_loss))
+                    Gen_loss=self.G_loss, Dis_loss=self.D_loss))
                 concatenated_images = torch.cat(
                     (x[:-1], y_fake[:-1], y[:-1]), dim=2)
 

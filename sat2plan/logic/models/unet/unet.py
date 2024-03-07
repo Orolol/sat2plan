@@ -165,17 +165,6 @@ class Unet():
 
                 batches_done = epoch * len(self.train_dl) + idx
 
-            if self.save_model_bool and (epoch+1) % 5 == 0:
-                save_model({"gen": self.netG, "disc": self.netD}, {
-                    "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
-                save_results(params=self.M_CFG, metrics=dict(
-                    Gen_loss=G_loss, Dis_loss=D_loss))
-                concatenated_images = torch.cat(
-                    (x[:-1], y_fake[:-1], y[:-1]), dim=2)
-
-                save_image(concatenated_images, "images/%d.png" %
-                           batches_done, nrow=3, normalize=True)
-
             if epoch != 0 and (epoch+1) % 5 == 0:
                 print("-- Test de validation --")
                 self.validation()
@@ -186,6 +175,18 @@ class Unet():
                     f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
                 print("------------------------")
 
+            if self.save_model_bool and (epoch+1) % 5 == 0:
+                if epoch < 11 or (self.val_Gen_loss[-1] + self.val_Dis_loss[-1] < self.val_Gen_loss[-2] + self.val_Dis_loss[-2]):
+                    save_model({"gen": self.netG, "disc": self.netD}, {
+                        "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
+                    save_results(params=self.M_CFG, metrics=dict(
+                        Gen_loss=G_loss, Dis_loss=D_loss))
+                    concatenated_images = torch.cat(
+                        (x[:-1], y_fake[:-1], y[:-1]), dim=2)
+
+                    save_image(concatenated_images, "images/%d.png" %
+                            batches_done, nrow=3, normalize=True)
+
         save_results(params=self.M_CFG, metrics=dict(
             Gen_loss=G_loss, Dis_loss=D_loss))
 
@@ -193,8 +194,13 @@ class Unet():
 
     # Test du modèle sur le set de validation
     def validation(self):
+
+        sum_D_loss = 0
+        sum_G_loss = 0
+        sum_G_fake_loss = 0
+        sum_G_L1_loss = 0
+
         for idx, (x, y) in enumerate(self.val_dl):
-            print(f"Val {idx+1}/{len(self.val_dl)}")
             ############## Discriminator ##############
 
             if self.cuda:
@@ -209,7 +215,7 @@ class Unet():
             D_fake_loss = self.BCE_Loss(D_fake, torch.zeros_like(D_fake))
             D_loss = (D_real_loss + D_fake_loss)/2
 
-            self.val_Dis_loss.append(D_loss.item())
+            sum_D_loss += D_loss.item()
             ############## Generator ##############
 
             # Loss measures generator's ability to fool the discriminator
@@ -217,6 +223,7 @@ class Unet():
             G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
             G_L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
             G_loss = G_fake_loss + G_L1
+
             self.val_Gen_loss.append(G_loss.item())
             self.val_Gen_fake_loss.append(G_fake_loss.item())
             self.val_Gen_L1_loss.append(G_L1.item())

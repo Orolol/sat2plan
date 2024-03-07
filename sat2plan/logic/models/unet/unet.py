@@ -18,7 +18,6 @@ from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, exp
 # Modèle Unet
 
 
-
 class Unet():
     def __init__(self, data_bucket='data-1k'):
 
@@ -162,7 +161,7 @@ class Unet():
                     % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
                 )
 
-                export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
+                # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
 
                 batches_done = epoch * len(self.train_dl) + idx
 
@@ -186,7 +185,7 @@ class Unet():
                         (x[:-1], y_fake[:-1], y[:-1]), dim=2)
 
                     save_image(concatenated_images, "images/%d.png" %
-                            batches_done, nrow=3, normalize=True)
+                               epoch, nrow=3, normalize=True)
 
         save_results(params=self.M_CFG, metrics=dict(
             Gen_loss=G_loss, Dis_loss=D_loss))
@@ -227,6 +226,8 @@ class Unet():
             G_L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
             G_loss = G_fake_loss + G_L1
 
+
             self.val_Gen_loss.append(G_loss.item())
             self.val_Gen_fake_loss.append(G_fake_loss.item())
             self.val_Gen_L1_loss.append(G_L1.item())
+

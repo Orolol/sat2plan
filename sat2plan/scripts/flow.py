@@ -73,11 +73,12 @@ def save_model(models: Dict[str, torch.nn.Module] = None, optimizers: Dict[str, 
         return None
 
     if MODEL_TARGET == "mlflow":
-        mlflow.pytorch.log_model(
-            pytorch_model=state,
-            artifact_path="model",
-            registered_model_name=MLFLOW_MODEL_NAME
-        )
+        for name, model in models.items():
+            mlflow.pytorch.log_model(
+                pytorch_model=model,
+                artifact_path="model",
+                registered_model_name=MLFLOW_MODEL_NAME + name
+            )
 
         print("✅ Model saved to MLflow")
 

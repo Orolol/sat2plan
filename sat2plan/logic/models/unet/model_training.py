@@ -81,8 +81,6 @@ def train_model(data_bucket='data-1k'):
 
     for epoch in range(n_epochs):
         for idx, (x, y) in enumerate(train_dl):
-            print(f"Batch : {idx+1}/{len(train_dl)}")
-
             if cuda:
                 x = x .cuda()
                 y = y.cuda()
@@ -129,8 +127,8 @@ def train_model(data_bucket='data-1k'):
             % (epoch+1, n_epochs, D_loss.item(), G_loss.item())
         )
         if save_model_bool and (epoch+1) % 5 == 0:
-            save_model(netG)
-            save_model(netD)
+            save_model(netG, suffix=f"-{epoch}-G")
+            save_model(netD, suffix=f"-{epoch}-D")
             save_results(params=CFG, metrics=dict(
                 Gen_loss=Gen_loss, Dis_loss=Dis_loss))
     save_results(params=CFG, metrics=dict(

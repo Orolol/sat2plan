@@ -7,7 +7,7 @@ from dateutil.parser import parse
 
 from sat2plan.logic.preproc.data import download_bucket_folder
 from sat2plan.logic.models.unet.model_training import train_model
-from sat2plan.logic.preproc.sauvegarde_params import export_params_txt, ouverture_fichier_json
+from sat2plan.logic.preproc.sauvegarde_params import export_params_txt
 
 # @mlflow_run
 def train():

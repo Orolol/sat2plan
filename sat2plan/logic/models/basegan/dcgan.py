@@ -100,7 +100,7 @@ def run_dcgan():
     os.makedirs("images", exist_ok=True)
     os.makedirs("models_checkpoint", exist_ok=True)
 
-    n_epochs = 1 #200
+    n_epochs = 200
     batch_size = 16
     lr = 0.0002
     b1 = 0.5
@@ -164,7 +164,7 @@ def run_dcgan():
     optimizer_D = torch.optim.Adam(
         discriminator.parameters(), lr=lr, betas=(b1, b2))
 
-    Tensor = torch.FloatTensor #torch.cuda.FloatTensor if cuda else torch.FloatTensor
+    Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
     # ----------
     #  Training

@@ -1,7 +1,8 @@
 import os
 import json
 import getpass
-from sat2plan.logic.models.unet.model_config import Configuration
+from sat2plan.logic.models.unet.model_config import Model_Configuration as Configuration
+
 
 def export_params_txt():
     """
@@ -10,11 +11,16 @@ def export_params_txt():
 
     # Ouverture du fichier
     fichier = open("parametres_code.txt", "w")
-    fichier.write("#################################################################\n")
-    fichier.write("#################################################################\n")
-    fichier.write("#---------------------PARAMETRES DU CALCUL----------------------#\n")
-    fichier.write("#################################################################\n")
-    fichier.write("#################################################################\n")
+    fichier.write(
+        "#################################################################\n")
+    fichier.write(
+        "#################################################################\n")
+    fichier.write(
+        "#---------------------PARAMETRES DU CALCUL----------------------#\n")
+    fichier.write(
+        "#################################################################\n")
+    fichier.write(
+        "#################################################################\n")
 
     # Nom opérateur
     fichier.write(f"OPERATEUR: {getpass.getuser()}\n")
@@ -54,6 +60,7 @@ def export_params_txt():
     fichier.close()
     pass
 
+
 def ouverture_fichier_json(nom):
     """
     Création d'un fichier json avec nom au choix
@@ -62,7 +69,7 @@ def ouverture_fichier_json(nom):
     return fichier
 
 
-def export_loss(fichier,epoch,batch,loss_l1,loss_g,loss_d,configuration):
+def export_loss(fichier, epoch, batch, loss_l1, loss_g, loss_d, configuration):
     """
     Export des données dans un fichier .json
     Le terme 'fichier' permet d'indiquer sur quel fichier .json il faut écrire
@@ -77,34 +84,34 @@ def export_loss(fichier,epoch,batch,loss_l1,loss_g,loss_d,configuration):
 
     # Stockage des paramètres dans un dictionnaire
     dictionary = {
-    "Epoch": epoch,
-    "Batch": batch,
-    "Loss_L1": loss_l1,
-    "Loss_G": loss_g,
-    "Loss_D": loss_d,
-    "Device": configuration.device,
-    "Train_dir": configuration.train_dir,
-    "Val_dir": configuration.val_dir,
-    "Learning_rate": configuration.learning_rate,
-    "Beta_1": configuration.beta1,
-    "Beta_2": configuration.beta2,
-    "N_cpu": configuration.n_cpu,
-    "Batch_size": configuration.batch_size,
-    "N_epochs": configuration.n_epochs,
-    "Sample_interval": configuration.sample_interval,
-    "Image_size": configuration.image_size,
-    "Channels_img": configuration.channels_img,
-    "Stride": configuration.stride,
-    "Padding": configuration.padding,
-    "Kernel_size": configuration.kernel_size,
-    "N_workers": configuration.num_workers,
-    "L1_lambda": configuration.l1_lambda,
-    "Lambda_gp": configuration.lambda_gp,
-    "Load_model": configuration.load_model,
-    "Save_model": configuration.save_model,
-    "Checkpoint_disc": configuration.checkpoint_disc,
-    "Checkpoint_gen": configuration.checkpoint_gen,
-    "Auteur": getpass.getuser()
+        "Epoch": epoch,
+        "Batch": batch,
+        "Loss_L1": loss_l1,
+        "Loss_G": loss_g,
+        "Loss_D": loss_d,
+        "Device": configuration.device,
+        "Train_dir": configuration.train_dir,
+        "Val_dir": configuration.val_dir,
+        "Learning_rate": configuration.learning_rate,
+        "Beta_1": configuration.beta1,
+        "Beta_2": configuration.beta2,
+        "N_cpu": configuration.n_cpu,
+        "Batch_size": configuration.batch_size,
+        "N_epochs": configuration.n_epochs,
+        "Sample_interval": configuration.sample_interval,
+        "Image_size": configuration.image_size,
+        "Channels_img": configuration.channels_img,
+        "Stride": configuration.stride,
+        "Padding": configuration.padding,
+        "Kernel_size": configuration.kernel_size,
+        "N_workers": configuration.num_workers,
+        "L1_lambda": configuration.l1_lambda,
+        "Lambda_gp": configuration.lambda_gp,
+        "Load_model": configuration.load_model,
+        "Save_model": configuration.save_model,
+        "Checkpoint_disc": configuration.checkpoint_disc,
+        "Checkpoint_gen": configuration.checkpoint_gen,
+        "Auteur": getpass.getuser()
     }
 
     # Mise en forme des dictionnaires dans le fichier

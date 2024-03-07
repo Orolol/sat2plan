@@ -191,6 +191,10 @@ class Unet():
             print(f"Val {idx+1}/{len(self.val_dl)}")
             ############## Discriminator ##############
 
+            if self.cuda:
+                x = x .cuda()
+                y = y.cuda()
+
             # Measure discriminator's ability to classify real from generated samples
             y_fake = self.netG(x)
             D_real = self.netD(x, y)

@@ -4,7 +4,6 @@ import torch
 class Global_Configuration:
 
     def __init__(self):
-
         # Hyperparamètres
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.train_dir = "./data/split/train"

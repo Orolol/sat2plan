@@ -14,12 +14,16 @@ from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
 
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
+from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, export_loss
 # Modèle Unet
 
+# Création du fichier params.json
+params_json = ouverture_fichier_json("params")
 
 class Unet():
 
     def __init__(self, data_bucket='data-1k'):
+
         # Import des paramètres globaux
         self.G_CFG = Global_Configuration()
 
@@ -157,6 +161,8 @@ class Unet():
                     % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
                 )
 
+                export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
+
                 batches_done = epoch * len(self.train_dl) + idx
 
             if epoch != 0 and (epoch+1) % 5 == 0:
@@ -217,11 +223,9 @@ class Unet():
             G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
             G_L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
             G_loss = G_fake_loss + G_L1
-            sum_G_fake_loss += G_fake_loss.item()
-            sum_G_L1_loss += G_L1.item()
-            sum_G_loss += G_loss.item()
 
-        self.val_Dis_loss.append(sum_D_loss/len(self.val_dl))
-        self.val_Gen_loss.append(sum_G_loss/len(self.val_dl))
-        self.val_Gen_fake_loss.append(sum_G_fake_loss/len(self.val_dl))
-        self.val_Gen_L1_loss.append(sum_G_L1_loss/len(self.val_dl))
+            self.val_Gen_loss.append(G_loss.item())
+            self.val_Gen_fake_loss.append(G_fake_loss.item())
+            self.val_Gen_L1_loss.append(G_L1.item())
+
+params_json.close()

@@ -149,31 +149,32 @@ class Unet():
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.netG(x)
                 D_real = self.netD(x, y)
-                """D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
+                D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
                 D_fake = self.netD(x, y_fake.detach())
                 D_fake_loss = self.BCE_Loss(D_fake, torch.zeros_like(D_fake))
-                D_loss = (D_real_loss + D_fake_loss)/2"""
-                D_loss = self.adversarial_loss(y_fake, y) + self.content_loss(y_fake, y) + self.style_loss(y_fake,y)
+                D_loss = (D_real_loss + D_fake_loss)/2
+
 
 
                 # Backward and optimize
                 self.netD.zero_grad()
                 self.Dis_loss.append(D_loss.item())
-                D_loss.backward()
+                D_loss.backward(retain_graph=True)
                 self.OptimizerD.step()
 
                 ############## Train Generator ##############
 
                 # Loss measures generator's ability to fool the discriminator
                 D_fake = self.netD(x, y_fake)
-                G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
+                """G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
                 L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
                 G_loss = G_fake_loss + L1
-                self.Gen_loss.append(G_loss.item())
+                self.Gen_loss.append(G_loss.item())"""
+                G_loss = self.adversarial_loss(y_fake, y) + self.content_loss(y_fake, y) + self.style_loss(y_fake,y)
 
                 # Backward and optimize
                 self.OptimizerG.zero_grad()
-                G_loss.backward()
+                G_loss.backward(retain_graph=True)
                 self.OptimizerG.step()
 
                 print(

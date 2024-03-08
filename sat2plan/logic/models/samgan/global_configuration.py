@@ -19,7 +19,7 @@ class Global_Configuration:
         self.n_epochs = 1000
         self.sample_interval = 200
 
-        self.image_size = 256
+        self.image_size = 512
         self.channels_img = 3
 
         #self.stride = 1

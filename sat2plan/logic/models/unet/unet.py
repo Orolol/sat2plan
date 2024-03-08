@@ -90,7 +90,6 @@ class Unet():
             print("Model loaded from MLflow")
 
         else:
-            print("Cuda is not available")
             self.netD = Discriminator(in_channels=3)
             self.netG = Generator(in_channels=3)
             self.OptimizerD = torch.optim.Adam(

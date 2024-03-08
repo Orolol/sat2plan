@@ -82,7 +82,7 @@ class SAM_GAN(nn.Module):
         return y_fake
 
 class Discriminator(nn.Module):
-    def __init__(self, kernel_size=4, stride=2, padding=1, in_channels=3, features=[64, 128, 256]):
+    def __init__(self, kernel_size=4, stride=2, padding=1, in_channels=3, features=[64, 128, 256, 512]):
         super().__init__()
         self.initial = nn.Sequential(
             nn.Conv2d(
@@ -110,6 +110,9 @@ class Discriminator(nn.Module):
     def forward(self, x, y):
         # X = Correct Satellite Image
         # Y = Correct/Fake Image
+
+        y = F.interpolate(y, size=x.size()[2:], mode='bilinear', align_corners=False)
+
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
         return self.model(x)

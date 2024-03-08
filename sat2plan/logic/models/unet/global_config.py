@@ -15,8 +15,8 @@ class Global_Configuration:
 
         self.n_cpu = 6
 
-        self.batch_size = 16
-        self.n_epochs = 200
+        self.batch_size = 1
+        self.n_epochs = 1000
         self.sample_interval = 10
 
         self.image_size = 64
@@ -27,7 +27,7 @@ class Global_Configuration:
         # self.kernel_size = 3
 
         self.num_workers = 2
-        self.l1_lambda = 100
+        self.l1_lambda = 50
         self.lambda_gp = 10
 
         self.load_model = False

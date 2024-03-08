@@ -178,7 +178,7 @@ class Unet():
                         (x[:-1], y_fake[:-1], y[:-1]), dim=2)
 
                     save_image(concatenated_images, "images/%d.png" %
-                            batches_done, nrow=3, normalize=True)
+                               batches_done, nrow=3, normalize=True)
 
             if epoch != 0 and (epoch+1) % 5 == 0:
                 print("-- Test de validation --")
@@ -196,7 +196,6 @@ class Unet():
                         "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
                     save_results(params=self.M_CFG, metrics=dict(
                         Gen_loss=G_loss, Dis_loss=D_loss))
-
 
         save_model({"gen": self.netG, "disc": self.netD}, {
             "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")

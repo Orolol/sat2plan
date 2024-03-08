@@ -160,6 +160,7 @@ class SAMGAN():
                 ############## Train Discriminator ##############
 
                 # Measure discriminator's ability to classify real from generated samples
+                print(x.shape, y.shape)
                 y_fake = self.sam_gan(x, y)
                 D_real = self.netD(x, y)
                 D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))

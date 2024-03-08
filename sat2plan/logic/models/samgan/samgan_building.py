@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+import torch.nn.functional as F
 
 from sat2plan.logic.models.blocks.blocks import CNN_Block
 
@@ -109,7 +110,7 @@ class Discriminator(nn.Module):
     def forward(self, x, y):
         # X = Correct Satellite Image
         # Y = Correct/Fake Image
-
+        y = F.interpolate(y, size=x.size()[2:], mode='bilinear', align_corners=False)
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
         return self.model(x)

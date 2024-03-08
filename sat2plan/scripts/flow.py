@@ -94,20 +94,14 @@ def load_model(stage="Production") -> torch.nn.Module:
         local_model_directory = os.path.join(LOCAL_REGISTRY_PATH, "models")
         local_model_paths = glob.glob(f"{local_model_directory}/*")
 
-        print("GET LOCAL MODEL PATHS", local_model_paths)
-
         if not local_model_paths:
             return None
 
         most_recent_model_path_on_disk = sorted(local_model_paths)[-1]
 
-        print('MOST RECENT MODEL PATH ON DISK', most_recent_model_path_on_disk)
-
         print(Fore.BLUE + f"\nLoad latest model from disk..." + Style.RESET_ALL)
 
         model = torch.load(most_recent_model_path_on_disk)
-
-        print(model)
 
         print("✅ Model loaded from local disk")
 

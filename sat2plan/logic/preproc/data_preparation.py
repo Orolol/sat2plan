@@ -23,7 +23,7 @@ def spliting_image(path):
 
     return X, y
 
-def resize(image,pourcentage=0.5):
+def resize(image,pourcentage=1):
     """
     Cette fonction accepte en entrée une liste de tenseur d'images.
     La modification de la taille s'effectue à l'aide de la variable "pourcentage" qui est de 50% par défaut

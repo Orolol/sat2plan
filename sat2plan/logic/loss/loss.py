@@ -57,7 +57,7 @@ class StyleLoss(nn.Module):
     def forward(self, y_fake, y):
         y_fake_gram = self.gram_matrix(y_fake)
         y_gram = self.gram_matrix(y)
-        style_loss = nn.L1Loss(y_fake_gram, y_gram)
+        style_loss = F.l1_loss(y_fake_gram, y_gram)
         return style_loss
 
 """# Exemple d'utilisation :

@@ -17,7 +17,7 @@ class ContentLoss(nn.Module):
         self.alpha1 = alpha1
         self.alpha2 = alpha2
         self.alpha3 = alpha3
-        self.vgg = models.vgg19(pretrained=True).features.eval()
+        self.vgg = models.vgg19(weights='DEFAULT').features.eval()
         self.l1_loss = nn.L1Loss()
 
     def forward(self, y_fake, y):

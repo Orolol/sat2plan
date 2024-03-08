@@ -88,6 +88,9 @@ class Unet():
 
         self.netD = Discriminator(in_channels=3)
         self.netG = Generator(in_channels=3)
+        self.adversarial_loss = AdversarialLoss()
+        self.content_loss = ContentLoss()
+        self.style_loss = StyleLoss()
 
         if self.load_model:
             model_and_optimizer = load_model()
@@ -100,6 +103,10 @@ class Unet():
             print("Cuda is available")
             self.netD = self.netD.cuda()
             self.netG = self.netG.cuda()
+            self.adversarial_loss.cuda()
+            self.content_loss.cuda()
+            self.style_loss.cuda()
+
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
@@ -121,9 +128,7 @@ class Unet():
         self.val_Gen_loss = []
         self.val_Gen_fake_loss = []
         self.val_Gen_L1_loss = []
-        self.adversarial_loss = AdversarialLoss()
-        self.content_loss = ContentLoss()
-        self.style_loss = StyleLoss()
+
 
         return
 
@@ -182,7 +187,7 @@ class Unet():
 
                 if idx == 0:
                     concatenated_images = torch.cat(
-                        (x[:-1], y_fake[:-1], y[:-1]), dim=2)
+                        (x[:], y_fake[:], y[:]), dim=2)
 
                     save_image(concatenated_images, "images/%d.png" %
                             batches_done, nrow=3, normalize=True)

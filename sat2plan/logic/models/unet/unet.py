@@ -172,15 +172,15 @@ class Unet():
                     save_image(concatenated_images, "images/%d.png" %
                             batches_done, nrow=3, normalize=True)
 
-            #if epoch != 0 and (epoch+1) % 5 == 0:
-            print("-- Test de validation --")
-            self.validation()
-            print(f"Epoch : {epoch+1}/{self.n_epochs} :")
-            print(
-                f"Validation Discriminator Loss : {self.val_Dis_loss[-1]}")
-            print(
-                f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
-            print("------------------------")
+            if epoch != 0 and (epoch+1) % 5 == 0:
+                print("-- Test de validation --")
+                self.validation()
+                print(f"Epoch : {epoch+1}/{self.n_epochs} :")
+                print(
+                    f"Validation Discriminator Loss : {self.val_Dis_loss[-1]}")
+                print(
+                    f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
+                print("------------------------")
 
             if self.save_model_bool and (epoch+1) % 5 == 0:
                 if epoch < 11 or (self.val_Gen_loss[-1] + self.val_Dis_loss[-1] < ([x+y for x in self.val_Gen_loss[:-1] for y in self.val_Dis_loss[:-1]]).mean()):

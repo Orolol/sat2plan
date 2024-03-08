@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from sat2plan.logic.models.blocks.blocks import CNN_Block, ConvBlock
+from sat2plan.logic.models.blocks.blocks import CNN_Block, ConvBlock, PixelwiseViT
 
 
 ####################################################################################################################
@@ -66,29 +66,28 @@ class Generator(nn.Module):
                                act="leaky", use_dropout=False)  # 32 X 32
         self.down3 = ConvBlock(features*4, features*8, down=True,
                                act="leaky", use_dropout=False)  # 16 X 16
-        self.down4 = ConvBlock(features*8, features*8, down=True,
+        self.down4 = ConvBlock(features*8, features*8 * 2, down=True,
                                act="leaky", use_dropout=False)  # 8 X 8
-        self.down5 = ConvBlock(features*8, features*8, down=True,
-                               act="leaky", use_dropout=False)  # 4 X 4
-        self.down6 = ConvBlock(features*8, features*8, down=True,
-                               act="leaky", use_dropout=False)  # 2 X 2
+
         ##############################################################################
         ################################# BOTTLENECK #################################
         ##############################################################################
-        self.bottleneck = nn.Sequential(
-            nn.Conv2d(features*8, features*8, kernel_size, stride, padding,
-                      padding_mode="reflect"),                      # 1 X 1
-            nn.ReLU()
+        # self.bottleneck = nn.Sequential(
+        #     nn.Conv2d(features*8, features*8, kernel_size, stride, padding,
+        #               padding_mode="reflect"),                      # 1 X 1
+        #     nn.ReLU()
+        # )
+
+        self.bottleneck = PixelwiseViT(
+            features * 8 * 2, 8, 12, 1536, 384,
+            image_shape=(3, 128, 128),
+            rezero=True
         )
+
         ##############################################################################
         ################################## DECODEUR ##################################
         ##############################################################################
-        self.up1 = ConvBlock(features*8, features*8, down=False,
-                             act="relu", use_dropout=True)
-        self.up2 = ConvBlock(features*8*2, features*8, down=False,
-                             act="relu", use_dropout=True)
-        self.up3 = ConvBlock(features*8*2, features*8, down=False,
-                             act="relu", use_dropout=True)
+
         self.up4 = ConvBlock(features*8*2, features*8, down=False,
                              act="relu", use_dropout=False)
         self.up5 = ConvBlock(features*8*2, features*4, down=False,
@@ -109,15 +108,11 @@ class Generator(nn.Module):
         d3 = self.down2(d2)
         d4 = self.down3(d3)
         d5 = self.down4(d4)
-        d6 = self.down5(d5)
-        d7 = self.down6(d6)
 
-        bottleneck = self.bottleneck(d7)
+        bottleneck = self.bottleneck(d5)
 
         up1 = self.up1(bottleneck)
-        up2 = self.up2(torch.cat([up1, d7], 1))
-        up3 = self.up3(torch.cat([up2, d6], 1))
-        up4 = self.up4(torch.cat([up3, d5], 1))
+        up4 = self.up4(torch.cat([up1, d5], 1))
         up5 = self.up5(torch.cat([up4, d4], 1))
         up6 = self.up6(torch.cat([up5, d3], 1))
         up7 = self.up7(torch.cat([up6, d2], 1))

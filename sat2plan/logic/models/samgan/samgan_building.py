@@ -112,8 +112,6 @@ class Discriminator(nn.Module):
         # X = Correct Satellite Image
         # Y = Correct/Fake Image
 
-        x = F.interpolate(x, size=y.size()[2:], mode='bilinear', align_corners=False)
-
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
         return self.model(x)

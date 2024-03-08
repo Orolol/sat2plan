@@ -13,7 +13,7 @@ from sat2plan.logic.models.unet.unet import Unet
 # @mlflow_run
 def train_unet():
 
-    data_bucket = 'data-1k'
+    data_bucket = 'data-10k'
     # export_params_txt()
 
     print(Fore.YELLOW + "Training unet" + Style.RESET_ALL)

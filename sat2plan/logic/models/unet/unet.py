@@ -15,6 +15,8 @@ from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
 from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, export_loss
+
+from sat2plan.logic.loss.loss import AdversarialLoss, ContentLoss, StyleLoss
 # Modèle Unet
 
 
@@ -83,25 +85,33 @@ class Unet():
     # Create models, optimizers ans losses
 
     def create_models(self):
-        self.cuda = True if torch.cuda.is_available() else False
+
+        self.netD = Discriminator(in_channels=3)
+        self.netG = Generator(in_channels=3)
+
         if self.load_model:
             model_and_optimizer = load_model()
-            self.netG = model_and_optimizer['model']
-            self.OptimizerG = model_and_optimizer['optimizer']
-            print("Model loaded from MLflow")
+            self.netG.load_state_dict(model_and_optimizer['gen_state_dict'])
+            self.netD.load_state_dict(model_and_optimizer['disc_state_dict'])
+
+        # Check Cuda
+        self.cuda = True if torch.cuda.is_available() else False
         if self.cuda:
             print("Cuda is available")
-            self.netD = Discriminator(in_channels=3).cuda()
-            self.netG = Generator(in_channels=3).cuda()
-        else:
-            print("Cuda is not available")
-            self.netD = Discriminator(in_channels=3)
-            self.netG = Generator(in_channels=3)
+            self.netD = self.netD.cuda()
+            self.netG = self.netG.cuda()
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
             self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+
+        if self.load_model:
+            model_and_optimizer = load_model()
+            self.OptimizerG.load_state_dict(
+                model_and_optimizer['gen_opt_optimizer_state_dict'])
+            self.OptimizerD.load_state_dict(
+                model_and_optimizer['gen_disc_optimizer_state_dict'])
 
         self.BCE_Loss = nn.BCEWithLogitsLoss()
         self.L1_Loss = nn.L1Loss()
@@ -111,13 +121,16 @@ class Unet():
         self.val_Gen_loss = []
         self.val_Gen_fake_loss = []
         self.val_Gen_L1_loss = []
+        self.adversarial_loss = AdversarialLoss()
+        self.content_loss = ContentLoss()
+        self.style_loss = StyleLoss()
 
         return
 
     # Train & save models
     def train(self):
         # Création du fichier params.json
-        params_json = open("params.json", mode="w",encoding='UTF-8')
+        params_json = open("params.json", mode="w", encoding='UTF-8')
 
         for epoch in range(self.n_epochs):
             for idx, (x, y) in enumerate(self.train_dl):
@@ -131,10 +144,12 @@ class Unet():
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.netG(x)
                 D_real = self.netD(x, y)
-                D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
+                """D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
                 D_fake = self.netD(x, y_fake.detach())
                 D_fake_loss = self.BCE_Loss(D_fake, torch.zeros_like(D_fake))
-                D_loss = (D_real_loss + D_fake_loss)/2
+                D_loss = (D_real_loss + D_fake_loss)/2"""
+                D_loss = self.adversarial_loss(y_fake, y) + self.content_loss(y_fake, y) + self.style_loss(y_fake,y)
+
 
                 # Backward and optimize
                 self.netD.zero_grad()
@@ -165,6 +180,13 @@ class Unet():
 
                 batches_done = epoch * len(self.train_dl) + idx
 
+                if idx == 0:
+                    concatenated_images = torch.cat(
+                        (x[:-1], y_fake[:-1], y[:-1]), dim=2)
+
+                    save_image(concatenated_images, "images/%d.png" %
+                            batches_done, nrow=3, normalize=True)
+
             if epoch != 0 and (epoch+1) % 5 == 0:
                 print("-- Test de validation --")
                 self.validation()
@@ -176,17 +198,15 @@ class Unet():
                 print("------------------------")
 
             if self.save_model_bool and (epoch+1) % 5 == 0:
-                if epoch < 11 or (self.val_Gen_loss[-1] + self.val_Dis_loss[-1] < min([x+y for x in self.val_Gen_loss[:-1] for y in self.val_Dis_loss[:-1]])):
+                if epoch < 11 or (self.val_Gen_loss[-1] + self.val_Dis_loss[-1] < sum([x+y for x in self.val_Gen_loss[:-1] for y in self.val_Dis_loss[:-1]])/len(self.val_Gen_loss)):
                     save_model({"gen": self.netG, "disc": self.netD}, {
                         "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
                     save_results(params=self.M_CFG, metrics=dict(
                         Gen_loss=G_loss, Dis_loss=D_loss))
-                    concatenated_images = torch.cat(
-                        (x[:-1], y_fake[:-1], y[:-1]), dim=2)
 
-                    save_image(concatenated_images, "images/%d.png" %
-                               epoch, nrow=3, normalize=True)
 
+        save_model({"gen": self.netG, "disc": self.netD}, {
+            "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
         save_results(params=self.M_CFG, metrics=dict(
             Gen_loss=G_loss, Dis_loss=D_loss))
 
@@ -226,8 +246,11 @@ class Unet():
             G_L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
             G_loss = G_fake_loss + G_L1
 
+            sum_G_loss += G_loss.item()
+            sum_G_fake_loss += G_fake_loss.item()
+            sum_G_L1_loss += G_L1.item()
 
-            self.val_Gen_loss.append(G_loss.item())
-            self.val_Gen_fake_loss.append(G_fake_loss.item())
-            self.val_Gen_L1_loss.append(G_L1.item())
-
+            self.val_Dis_loss.append(sum_D_loss/len(self.val_dl))
+            self.val_Gen_loss.append(sum_G_loss/len(self.val_dl))
+            self.val_Gen_fake_loss.append(sum_G_fake_loss/len(self.val_dl))
+            self.val_Gen_L1_loss.append(sum_G_L1_loss/len(self.val_dl))

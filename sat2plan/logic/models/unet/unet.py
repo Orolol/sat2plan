@@ -176,17 +176,20 @@ class Unet():
                 print("------------------------")
 
             if self.save_model_bool and (epoch+1) % 5 == 0:
-                if epoch < 11 or (self.val_Gen_loss[-1] + self.val_Dis_loss[-1] < min([x+y for x in self.val_Gen_loss[:-1] for y in self.val_Dis_loss[:-1]])):
+                if epoch < 11 or (self.val_Gen_loss[-1] + self.val_Dis_loss[-1] < ([x+y for x in self.val_Gen_loss[:-1] for y in self.val_Dis_loss[:-1]]).mean()):
                     save_model({"gen": self.netG, "disc": self.netD}, {
                         "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
                     save_results(params=self.M_CFG, metrics=dict(
                         Gen_loss=G_loss, Dis_loss=D_loss))
-                    concatenated_images = torch.cat(
-                        (x[:-1], y_fake[:-1], y[:-1]), dim=2)
 
-                    save_image(concatenated_images, "images/%d.png" %
-                               epoch, nrow=3, normalize=True)
+                concatenated_images = torch.cat(
+                    (x[:-1], y_fake[:-1], y[:-1]), dim=2)
 
+                save_image(concatenated_images, "images/%d.png" %
+                        batches_done, nrow=3, normalize=True)
+
+        save_model({"gen": self.netG, "disc": self.netD}, {
+                        "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
         save_results(params=self.M_CFG, metrics=dict(
             Gen_loss=G_loss, Dis_loss=D_loss))
 
@@ -230,4 +233,3 @@ class Unet():
             self.val_Gen_loss.append(G_loss.item())
             self.val_Gen_fake_loss.append(G_fake_loss.item())
             self.val_Gen_L1_loss.append(G_L1.item())
-

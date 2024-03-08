@@ -83,25 +83,27 @@ class Unet():
     # Create models, optimizers ans losses
 
     def create_models(self):
-        self.cuda = True if torch.cuda.is_available() else False
         if self.load_model:
             model_and_optimizer = load_model()
             self.netG = model_and_optimizer['model']
             self.OptimizerG = model_and_optimizer['optimizer']
             print("Model loaded from MLflow")
-        if self.cuda:
-            print("Cuda is available")
-            self.netD = Discriminator(in_channels=3).cuda()
-            self.netG = Generator(in_channels=3).cuda()
+
         else:
             print("Cuda is not available")
             self.netD = Discriminator(in_channels=3)
             self.netG = Generator(in_channels=3)
+            self.OptimizerD = torch.optim.Adam(
+                self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+            self.OptimizerG = torch.optim.Adam(
+                self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
 
-        self.OptimizerD = torch.optim.Adam(
-            self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
-        self.OptimizerG = torch.optim.Adam(
-            self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+        # Check Cuda
+        self.cuda = True if torch.cuda.is_available() else False
+        if self.cuda:
+            print("Cuda is available")
+            self.netD = self.netD.cuda()
+            self.netG = self.netG.cuda()
 
         self.BCE_Loss = nn.BCEWithLogitsLoss()
         self.L1_Loss = nn.L1Loss()
@@ -117,7 +119,7 @@ class Unet():
     # Train & save models
     def train(self):
         # Création du fichier params.json
-        params_json = open("params.json", mode="w",encoding='UTF-8')
+        params_json = open("params.json", mode="w", encoding='UTF-8')
 
         for epoch in range(self.n_epochs):
             for idx, (x, y) in enumerate(self.train_dl):
@@ -186,10 +188,10 @@ class Unet():
                     (x[:-1], y_fake[:-1], y[:-1]), dim=2)
 
                 save_image(concatenated_images, "images/%d.png" %
-                        batches_done, nrow=3, normalize=True)
+                           batches_done, nrow=3, normalize=True)
 
         save_model({"gen": self.netG, "disc": self.netD}, {
-                        "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
+            "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
         save_results(params=self.M_CFG, metrics=dict(
             Gen_loss=G_loss, Dis_loss=D_loss))
 
@@ -228,7 +230,6 @@ class Unet():
             G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
             G_L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
             G_loss = G_fake_loss + G_L1
-
 
             self.val_Gen_loss.append(G_loss.item())
             self.val_Gen_fake_loss.append(G_fake_loss.item())

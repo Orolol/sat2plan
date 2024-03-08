@@ -83,19 +83,14 @@ class Unet():
     # Create models, optimizers ans losses
 
     def create_models(self):
+
+        self.netD = Discriminator(in_channels=3)
+        self.netG = Generator(in_channels=3)
+
         if self.load_model:
             model_and_optimizer = load_model()
-            self.netG = model_and_optimizer['model']
-            self.OptimizerG = model_and_optimizer['optimizer']
-            print("Model loaded from MLflow")
-
-        else:
-            self.netD = Discriminator(in_channels=3)
-            self.netG = Generator(in_channels=3)
-            self.OptimizerD = torch.optim.Adam(
-                self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
-            self.OptimizerG = torch.optim.Adam(
-                self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+            self.netG.load_state_dict(model_and_optimizer['gen_state_dict'])
+            self.netD.load_state_dict(model_and_optimizer['disc_state_dict'])
 
         # Check Cuda
         self.cuda = True if torch.cuda.is_available() else False
@@ -103,6 +98,18 @@ class Unet():
             print("Cuda is available")
             self.netD = self.netD.cuda()
             self.netG = self.netG.cuda()
+
+        self.OptimizerD = torch.optim.Adam(
+            self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+        self.OptimizerG = torch.optim.Adam(
+            self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+
+        if self.load_model:
+            model_and_optimizer = load_model()
+            self.OptimizerG.load_state_dict(
+                model_and_optimizer['gen_opt_optimizer_state_dict'])
+            self.OptimizerD.load_state_dict(
+                model_and_optimizer['gen_disc_optimizer_state_dict'])
 
         self.BCE_Loss = nn.BCEWithLogitsLoss()
         self.L1_Loss = nn.L1Loss()

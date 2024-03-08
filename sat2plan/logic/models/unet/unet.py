@@ -83,25 +83,33 @@ class Unet():
     # Create models, optimizers ans losses
 
     def create_models(self):
-        self.cuda = True if torch.cuda.is_available() else False
+
+        self.netD = Discriminator(in_channels=3)
+        self.netG = Generator(in_channels=3)
+
         if self.load_model:
             model_and_optimizer = load_model()
-            self.netG = model_and_optimizer['model']
-            self.OptimizerG = model_and_optimizer['optimizer']
-            print("Model loaded from MLflow")
+            self.netG.load_state_dict(model_and_optimizer['gen_state_dict'])
+            self.netD.load_state_dict(model_and_optimizer['disc_state_dict'])
+
+        # Check Cuda
+        self.cuda = True if torch.cuda.is_available() else False
         if self.cuda:
             print("Cuda is available")
-            self.netD = Discriminator(in_channels=3).cuda()
-            self.netG = Generator(in_channels=3).cuda()
-        else:
-            print("Cuda is not available")
-            self.netD = Discriminator(in_channels=3)
-            self.netG = Generator(in_channels=3)
+            self.netD = self.netD.cuda()
+            self.netG = self.netG.cuda()
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
             self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+
+        if self.load_model:
+            model_and_optimizer = load_model()
+            self.OptimizerG.load_state_dict(
+                model_and_optimizer['gen_opt_optimizer_state_dict'])
+            self.OptimizerD.load_state_dict(
+                model_and_optimizer['gen_disc_optimizer_state_dict'])
 
         self.BCE_Loss = nn.BCEWithLogitsLoss()
         self.L1_Loss = nn.L1Loss()
@@ -117,7 +125,7 @@ class Unet():
     # Train & save models
     def train(self):
         # Création du fichier params.json
-        params_json = open("params.json", mode="w",encoding='UTF-8')
+        params_json = open("params.json", mode="w", encoding='UTF-8')
 
         for epoch in range(self.n_epochs):
             for idx, (x, y) in enumerate(self.train_dl):
@@ -189,8 +197,9 @@ class Unet():
                     save_results(params=self.M_CFG, metrics=dict(
                         Gen_loss=G_loss, Dis_loss=D_loss))
 
+
         save_model({"gen": self.netG, "disc": self.netD}, {
-                        "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
+            "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
         save_results(params=self.M_CFG, metrics=dict(
             Gen_loss=G_loss, Dis_loss=D_loss))
 

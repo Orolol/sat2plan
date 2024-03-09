@@ -73,13 +73,12 @@ class SAM_GAN(nn.Module):
         self.content_encoder = ContentEncoder()
         self.style_encoder = StyleEncoder()
         self.decoder = Decoder()
-        # À compléter avec l'initialisation des autres composants du modèle
 
     def forward(self, x, y):
         content_space = self.content_encoder(x)
         style_space = self.style_encoder(y)
         combined_space = content_space + style_space  # À adapter selon l'architecture exacte
-        y_fake = self.decoder(combined_space)
+        y_fake = F.interpolate(self.decoder(combined_space), size=(512, 512), mode='bilinear', align_corners=False)
         return y_fake
 
 class Discriminator(nn.Module):

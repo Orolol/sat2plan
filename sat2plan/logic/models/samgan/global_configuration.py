@@ -15,9 +15,9 @@ class Global_Configuration:
 
         self.n_cpu = 6
 
-        self.batch_size = 1
-        self.n_epochs = 1000
-        self.sample_interval = 200
+        self.batch_size = 8
+        self.n_epochs = 200
+        self.sample_interval = 50
 
         self.image_size = 512
         self.channels_img = 3

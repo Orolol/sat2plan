@@ -195,7 +195,7 @@ class SAMGAN():
 
                 batches_done = epoch * len(self.train_dl) + idx
 
-                if idx == 0:
+                if idx == 50:
                     concatenated_images = torch.cat(
                         (x[:], y_fake[:], y[:]), dim=2)
 

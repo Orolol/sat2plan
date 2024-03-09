@@ -199,7 +199,7 @@ class SAMGAN():
                     concatenated_images = torch.cat(
                         (x[:], y_fake[:], y[:]), dim=2)
 
-                    save_image(concatenated_images, "images/%d.png" %
+                    save_image(concatenated_images, "images/__%d.png" %
                             batches_done, nrow=3, normalize=True)
 
             if epoch != 0 and (epoch+1) % 5 == 0:

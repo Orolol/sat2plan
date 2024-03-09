@@ -40,7 +40,7 @@ class PCIR(nn.Module):
 
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
         self.norm = nn.InstanceNorm2d(out_channels)
-        self.relu = nn.ReLU()
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
         x = self.conv(x)
@@ -56,7 +56,6 @@ class ContentEncoder(nn.Module):
             PCIR(3, 64, kernel_size=4, padding=2),
             #SelfAttention(64),
             PCIR(64, 128, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
             #SelfAttention(128),
             nn.MaxPool2d(kernel_size=2, stride=2),
             PCIR(128, 256, kernel_size=4, padding=2),

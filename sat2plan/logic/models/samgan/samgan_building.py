@@ -48,6 +48,20 @@ class PCIR(nn.Module):
         x = self.relu(x)
         return x
 
+class CTIR(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
+        super(CTIR, self).__init__()
+
+        self.conv_transpose = nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding)
+        self.norm = nn.InstanceNorm2d(out_channels)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        x = self.conv_transpose(x)
+        x = self.norm(x)
+        x = self.relu(x)
+        return x
+
 class ContentEncoder(nn.Module):
     def __init__(self):
         super(ContentEncoder, self).__init__()
@@ -99,15 +113,13 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         self.upconv_layers = nn.Sequential(
-            nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2),
-            nn.ReLU(inplace=True),
+            CTIR(512, 256, kernel_size=2, stride=2),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(256, 128, kernel_size=3, stride=2),
-            nn.ReLU(inplace=True),
+            CTIR(256, 128, kernel_size=3, stride=2),
             nn.Conv2d(128, 64, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(64, 3, kernel_size=4, stride=2, padding=2),
+            CTIR(64, 3, kernel_size=4, stride=2, padding=2),
             nn.Tanh()
         )
 

@@ -178,15 +178,16 @@ class SAMGAN():
                 # Loss measures generator's ability to fool the discriminator
                 D_fake = self.netD(x, y_fake)
                 G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))"""
-                Sam_gan_loss = self.adversarial_loss(y_fake.detach(), y) + self.content_loss(y_fake, y) + self.style_loss(y_fake,y)
+                print(f'adv : {self.adversarial_loss(y_fake, y).shape}. cont : {self.content_loss(y_fake, y).shape}, style : {self.style_loss(y_fake,y).shape}')
+                Sam_gan_loss = self.adversarial_loss(y_fake, y) + self.content_loss(y_fake, y) + self.style_loss(y_fake,y)
                 self.Gen_loss.append(Sam_gan_loss.item())
 
                 # Backward and optimize
                 self.OptimizerG.zero_grad()
-                Sam_gan_loss.backward(retain_graph=True)
+                Sam_gan_loss.backward(inplace=True)
                 self.OptimizerG.step()
                 self.netD.zero_grad()
-                Sam_gan_loss.backward()
+                Sam_gan_loss.backward(inplace=True)
                 self.OptimizerD.step()
 
 

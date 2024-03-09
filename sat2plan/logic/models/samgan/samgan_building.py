@@ -11,13 +11,17 @@ class ContentEncoder(nn.Module):
         self.conv_layers = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.Conv2d(64, 64, kernel_size=1),
+            nn.Conv2d(64, 128, kernel_size=4, padding=2),
             nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, kernel_size=1),
             nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(128, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, 512, kernel_size=3, padding=1),
+            nn.Conv2d(256, 256, kernel_size=1),
+            nn.Conv2d(256, 512, kernel_size=4, padding=2),
             nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=1),
             nn.MaxPool2d(kernel_size=2, stride=2)
         )
 
@@ -30,15 +34,19 @@ class StyleEncoder(nn.Module):
         super(StyleEncoder, self).__init__()
 
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=3, padding=1),
+            nn.Conv2d(3, 64, kernel_size=4, padding=2),
             nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=1),
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, kernel_size=1),
             nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.Conv2d(128, 256, kernel_size=4, padding=2),
             nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=1),
             nn.Conv2d(256, 512, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=1),
             nn.MaxPool2d(kernel_size=2, stride=2)
         )
 
@@ -59,7 +67,7 @@ class Decoder(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(128, 64, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(64, 3, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(64, 3, kernel_size=4, stride=2, padding=2),
             nn.Tanh()
         )
 

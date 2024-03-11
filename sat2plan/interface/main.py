@@ -8,7 +8,7 @@ from dateutil.parser import parse
 from sat2plan.logic.preproc.data import download_bucket_folder
 from sat2plan.logic.preproc.sauvegarde_params import export_params_txt
 from sat2plan.logic.models.unet.unet import Unet
-from sat2plan.logic.models.basegan import dcgan
+from sat2plan.logic.models.dcgan import dcgan
 
 
 # @mlflow_run

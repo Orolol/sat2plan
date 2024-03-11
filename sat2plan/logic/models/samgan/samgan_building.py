@@ -73,7 +73,7 @@ class StyleEncoder(nn.Module):
                 nn.ReLU(inplace=True)
             ])
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(64, in_channels)
+        self.fc = nn.Linear(64, 64)
 
     def forward(self, x):
         for conv in self.convs:
@@ -119,8 +119,6 @@ class SAM_GAN(nn.Module):
         content_features = self.content_encoder(content_img)
         style_features = self.style_encoder(style_imgs)
         print(content_features.size(), style_features.size())
-        if content_features.size()[2:] != style_features.size()[2:]:
-            style_features = F.interpolate(style_features, size=content_features.size()[2:], mode='bilinear', align_corners=False)
         combined_space = content_features + style_features  # À adapter selon l'architecture exacte
         y_fake = F.interpolate(self.decoder(combined_space), size=(512, 512), mode='bilinear', align_corners=False)
         return y_fake

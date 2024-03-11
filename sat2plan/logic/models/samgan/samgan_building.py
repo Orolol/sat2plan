@@ -151,6 +151,24 @@ class SAM_GAN(nn.Module):
         style_features = self.style_encoder(style_imgs)
         return self.decoder(content_features, style_features)
 
+class Discriminator(nn.Module):
+    def __init__(self, in_channels):
+        super(Discriminator, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=4, stride=2, padding=35)
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=35)
+        self.conv3 = nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=35)
+        self.conv4 = nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=35)
+        self.conv5 = nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=35)
+
+    def forward(self, real_img, generated_img):
+        x = torch.cat([real_img, generated_img], dim=1)  # Concatenate along the channel dimension
+        x = F.leaky_relu(self.conv1(x), 0.2)
+        x = F.leaky_relu(self.conv2(x), 0.2)
+        x = F.leaky_relu(self.conv3(x), 0.2)
+        x = F.leaky_relu(self.conv4(x), 0.2)
+        x = self.conv5(x)
+        return x
+
 
 """class SeBlock(nn.Module):
     def __init__(self, in_channels, reduction_ratio=16):
@@ -313,7 +331,7 @@ class SAM_GAN(nn.Module):
         y_fake = F.interpolate(self.decoder(combined_space), size=(512, 512), mode='bilinear', align_corners=False)
         return y_fake"""
 
-class Discriminator(nn.Module):
+"""class Discriminator(nn.Module):
     def __init__(self, kernel_size=4, stride=2, padding=2, in_channels=3, features=[64, 64, 64]):
         super().__init__()
         self.initial = nn.Sequential(
@@ -345,7 +363,7 @@ class Discriminator(nn.Module):
 
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
-        return self.model(x)
+        return self.model(x)"""
 
 """# Création d'une instance de modèle
 model = SAM_GAN()

@@ -134,7 +134,7 @@ class Decoder(nn.Module):
         out = self.tanh(self.norm2(self.conv2(out)))
         return out
 
-class Discriminator(nn.Module):
+"""class Discriminator(nn.Module):
     def __init__(self, in_channels):
         super(Discriminator, self).__init__()
         self.conv1 = nn.Conv2d(in_channels*2, 64, kernel_size=4, stride=2, padding=35)
@@ -150,7 +150,7 @@ class Discriminator(nn.Module):
         x = F.leaky_relu(self.conv3(x), 0.2)
         x = F.leaky_relu(self.conv4(x), 0.2)
         x = self.conv5(x)
-        return x
+        return x"""
 
 class SAM_GAN(nn.Module):
     def __init__(self, in_channels=3, out_channels=3, num_residual_blocks=7):
@@ -333,7 +333,7 @@ class SAM_GAN(nn.Module):
         y_fake = F.interpolate(self.decoder(combined_space), size=(512, 512), mode='bilinear', align_corners=False)
         return y_fake"""
 
-"""class Discriminator(nn.Module):
+class Discriminator(nn.Module):
     def __init__(self, kernel_size=4, stride=2, padding=2, in_channels=3, features=[64, 64, 64]):
         super().__init__()
         self.initial = nn.Sequential(
@@ -365,4 +365,4 @@ class SAM_GAN(nn.Module):
 
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
-        return self.model(x)"""
+        return self.model(x)

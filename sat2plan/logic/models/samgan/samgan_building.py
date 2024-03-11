@@ -68,7 +68,7 @@ class ContentEncoder(nn.Module):
 
         self.conv_layers = nn.Sequential(
             PCIR(3, 64, kernel_size=4, padding=2),
-            #SelfAttention(64),
+            SelfAttention(64),
             PCIR(64, 128, kernel_size=3, padding=1),
             #SelfAttention(128),
             nn.MaxPool2d(kernel_size=2, stride=2),
@@ -90,7 +90,7 @@ class StyleEncoder(nn.Module):
         self.conv_layers = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=4, padding=2),
             nn.ReLU(inplace=True),
-            #SelfAttention(64),
+            SelfAttention(64),
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             #SelfAttention(128),

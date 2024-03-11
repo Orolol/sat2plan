@@ -88,11 +88,13 @@ class UCVGan():
 
         self.netD = Discriminator(in_channels=3)
         self.netG = Generator(in_channels=3)
+        self.starting_epoch = 0
 
         if self.load_model:
-            model_and_optimizer = load_model()
+            model_and_optimizer, epoch = load_model()
             self.netG.load_state_dict(model_and_optimizer['gen_state_dict'])
             self.netD.load_state_dict(model_and_optimizer['disc_state_dict'])
+            self.starting_epoch = epoch
 
         # Check Cuda
         self.cuda = True if torch.cuda.is_available() else False
@@ -136,7 +138,7 @@ class UCVGan():
         print("Total params in Generator :", pytorch_total_params_G)
         print("Total params in Discriminator :", pytorch_total_params_D)
 
-        for epoch in range(self.n_epochs):
+        for epoch in range(self.starting_epoch, self.n_epochs):
             for idx, (x, y, to_save) in enumerate(self.train_dl):
 
                 if self.cuda:

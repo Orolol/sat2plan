@@ -100,12 +100,13 @@ def load_model(stage="Production") -> torch.nn.Module:
         most_recent_model_path_on_disk = sorted(local_model_paths)[-1]
 
         print(Fore.BLUE + f"\nLoad latest model from disk..." + Style.RESET_ALL)
-
+        print(f"Most recent model path: {most_recent_model_path_on_disk}")
+        epoch = most_recent_model_path_on_disk.split("/")[-1].split("-")[-2]
         model = torch.load(most_recent_model_path_on_disk)
 
         print("✅ Model loaded from local disk")
 
-        return model
+        return (model, epoch)
 
     elif MODEL_TARGET == "gcs":
         print(Fore.BLUE + f"\nLoad latest model from GCS..." + Style.RESET_ALL)

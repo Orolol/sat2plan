@@ -164,8 +164,8 @@ def run_dcgan():
 
     Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
-    netG = Generator().cuda().apply(weights_init_normal)
-    netD = Discriminator().cuda().apply(weights_init_normal)
+    netG = Generator().cuda()
+    netD = Discriminator().cuda()
     BCE_Loss = nn.BCEWithLogitsLoss().cuda()
     OptimizerD = torch.optim.Adam(
         discriminator.parameters(), lr=lr, betas=(b1, b2))

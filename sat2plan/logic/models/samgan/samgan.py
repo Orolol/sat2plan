@@ -86,9 +86,9 @@ class SAMGAN():
     def create_models(self):
 
         self.sam_gan = SAM_GAN()
-        self.content_encoder = ContentEncoder()
-        self.style_encoder = StyleEncoder()
-        self.decoder = Decoder()
+        #self.content_encoder = ContentEncoder()
+        #self.style_encoder = StyleEncoder()
+        #self.decoder = Decoder()
         self.netD = Discriminator(in_channels=3)
 
         self.adversarial_loss = AdversarialLoss()

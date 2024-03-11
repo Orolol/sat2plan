@@ -170,7 +170,7 @@ class SAMGAN():
                 # Backward and optimize
                 self.netD.zero_grad()
                 self.Dis_loss.append(D_loss.item())
-                D_loss.backward()
+                D_loss.backward(retain_graph=True)
                 self.OptimizerD.step()
 
                 ############## Train Generator ##############

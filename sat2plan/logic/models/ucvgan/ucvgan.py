@@ -193,7 +193,7 @@ class UCVGan():
                     f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
                 print("------------------------")
 
-            if self.save_model_bool and (epoch+1) % 5 == 0:
+            if self.save_model_bool:
                 if epoch < 11 or (self.val_Gen_loss[-1] + self.val_Dis_loss[-1] < sum([x+y for x in self.val_Gen_loss[:-1] for y in self.val_Dis_loss[:-1]])/len(self.val_Gen_loss)):
                     save_model({"gen": self.netG, "disc": self.netD}, {
                         "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")

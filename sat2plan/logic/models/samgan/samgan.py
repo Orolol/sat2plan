@@ -163,7 +163,7 @@ class SAMGAN():
                 y_fake = self.sam_gan(x, y)
                 D_real = self.netD(x, y)
                 D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
-                D_fake = self.netD(x, y_fake.detach())
+                D_fake = self.netD(x, y_fake)
                 D_fake_loss = self.BCE_Loss(D_fake, torch.zeros_like(D_fake))
                 D_loss = (D_real_loss + D_fake_loss)/2
 

@@ -17,22 +17,25 @@ class SelfAttention(nn.Module):
     def forward(self, x):
         batch_size, channels, height, width = x.size()
 
-        # Project features to query, key, and value
-        proj_query = self.query_conv(x).view(batch_size, -1, height * width).permute(0, 2, 1)
-        proj_key = self.key_conv(x).view(batch_size, -1, height * width)
-        energy = torch.bmm(proj_query, proj_key)
+        # Project features to query, key, and value with smaller channels
+        proj_query = self.query_conv(x)
+        proj_key = self.key_conv(x)
+        proj_value = self.value_conv(x)
+
+        # Compute attention map
+        energy = torch.matmul(proj_query.view(batch_size, -1, height * width).permute(0, 2, 1),
+                              proj_key.view(batch_size, -1, height * width))
         attention = F.softmax(energy, dim=-1)
 
-        proj_value = self.value_conv(x).view(batch_size, -1, height * width)
-
         # Compute attention-weighted features
-        out = torch.bmm(proj_value, attention.permute(0, 2, 1))
+        out = torch.matmul(attention, proj_value.view(batch_size, -1, height * width).permute(0, 2, 1))
         out = out.view(batch_size, channels, height, width)
 
         # Residual connection
         out = self.gamma * out + x
 
         return out
+
 
 class PCIR(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):

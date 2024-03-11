@@ -105,9 +105,9 @@ class SAMGAN():
         if self.cuda:
             print("Cuda is available")
             self.sam_gan = self.sam_gan.cuda()
-            self.content_encoder = self.content_encoder.cuda()
-            self.style_encoder = self.style_encoder.cuda()
-            self.decoder = self.decoder.cuda()
+            #self.content_encoder = self.content_encoder.cuda()
+            #self.style_encoder = self.style_encoder.cuda()
+            #self.decoder = self.decoder.cuda()
             self.netD = self.netD.cuda()
             self.adversarial_loss.cuda()
             self.content_loss.cuda()

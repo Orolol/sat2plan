@@ -134,23 +134,6 @@ class Decoder(nn.Module):
         out = self.tanh(self.norm2(self.conv2(out)))
         return out
 
-class SAM_GAN(nn.Module):
-    def __init__(self, in_channels=3, out_channels=3, reduction_ratio=16, num_residual_blocks=7):
-        super(SAM_GAN, self).__init__()
-        self.content_encoder = ContentEncoder(in_channels, num_residual_blocks)
-        self.style_encoder = StyleEncoder(out_channels)
-        self.decoder = Decoder(64, out_channels, out_channels)  # Passer out_channels à Decoder
-
-    def forward(self, content_img, style_imgs=None):
-        if style_imgs is None:
-            content_features = self.content_encoder(content_img)
-            style_features = self.style_encoder(content_img)
-            return self.decoder(content_features, style_features)
-
-        content_features = self.content_encoder(content_img)
-        style_features = self.style_encoder(style_imgs)
-        return self.decoder(content_features, style_features)
-
 class Discriminator(nn.Module):
     def __init__(self, in_channels):
         super(Discriminator, self).__init__()
@@ -167,6 +150,27 @@ class Discriminator(nn.Module):
         x = F.leaky_relu(self.conv3(x), 0.2)
         x = F.leaky_relu(self.conv4(x), 0.2)
         x = self.conv5(x)
+        return x
+
+class SAM_GAN(nn.Module):
+    def __init__(self, in_channels=3, out_channels=3, reduction_ratio=16, num_residual_blocks=7):
+        super(SAM_GAN, self).__init__()
+        self.content_encoder = ContentEncoder(in_channels, num_residual_blocks)
+        self.style_encoder = StyleEncoder(out_channels)
+        self.decoder = Decoder(64, out_channels, out_channels)  # Passer out_channels à Decoder
+        self.discriminator = Discriminator(in_channels=3)
+
+    def forward(self, content_img, style_imgs=None):
+        if style_imgs is None:
+            content_features = self.content_encoder(content_img)
+            style_features = self.style_encoder(content_img)
+            y_fake = self.decoder(content_features, style_features)
+            return y_fake
+
+        content_features = self.content_encoder(content_img)
+        style_features = self.style_encoder(style_imgs)
+        y_fake = self.decoder(content_features, style_features)
+        x = self.discriminator(style_imgs, y_fake)
         return x
 
 

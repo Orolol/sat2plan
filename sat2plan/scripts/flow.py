@@ -106,7 +106,7 @@ def load_model(stage="Production") -> torch.nn.Module:
 
         print("✅ Model loaded from local disk")
 
-        return (model, epoch)
+        return model, epoch
 
     elif MODEL_TARGET == "gcs":
         print(Fore.BLUE + f"\nLoad latest model from GCS..." + Style.RESET_ALL)

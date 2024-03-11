@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
-from torchsummary import summary
 
 from sat2plan.logic.models.ucvgan.global_config import Global_Configuration
 from sat2plan.logic.models.ucvgan.model_config import Model_Configuration
@@ -108,13 +107,6 @@ class UCVGan():
         self.OptimizerG = torch.optim.Adam(
             self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
 
-        if self.load_model:
-            model_and_optimizer = load_model()
-            self.OptimizerG.load_state_dict(
-                model_and_optimizer['gen_opt_optimizer_state_dict'])
-            self.OptimizerD.load_state_dict(
-                model_and_optimizer['gen_disc_optimizer_state_dict'])
-
         self.BCE_Loss = nn.BCEWithLogitsLoss()
         self.L1_Loss = nn.L1Loss()
         self.Gen_loss = []
@@ -138,7 +130,7 @@ class UCVGan():
         print("Total params in Generator :", pytorch_total_params_G)
         print("Total params in Discriminator :", pytorch_total_params_D)
 
-        for epoch in range(self.starting_epoch, self.n_epochs):
+        for epoch in range(int(self.starting_epoch), self.n_epochs):
             for idx, (x, y, to_save) in enumerate(self.train_dl):
 
                 if self.cuda:
@@ -181,7 +173,7 @@ class UCVGan():
                 self.OptimizerG.zero_grad()
                 G_loss.backward()
                 self.OptimizerG.step()
-
+                batches_done = epoch * len(self.train_dl) + idx
                 if idx % 100 == 0:
                     print(
                         "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
@@ -190,12 +182,10 @@ class UCVGan():
                     concatenated_images = torch.cat(
                         (x[:], y_fake[:], y[:]), dim=2)
 
-                    save_image(concatenated_images, "images/%d.png" %
-                               str(epoch) + "-" + str(batches_done), nrow=3, normalize=True)
+                    save_image(
+                        concatenated_images, f"images/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
 
                 # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
-
-                batches_done = epoch * len(self.train_dl) + idx
 
                 if idx == 0:
                     concatenated_images = torch.cat(

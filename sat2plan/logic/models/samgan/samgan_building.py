@@ -161,9 +161,7 @@ class Discriminator(nn.Module):
         self.conv5 = nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=35)
 
     def forward(self, real_img, generated_img):
-        print(f'y : {real_img.size()}, y_fake : {generated_img.size()}')
         x = torch.cat([real_img, generated_img], dim=1)  # Concatenate along the channel dimension
-        print(x.size())
         x = F.leaky_relu(self.conv1(x), 0.2)
         x = F.leaky_relu(self.conv2(x), 0.2)
         x = F.leaky_relu(self.conv3(x), 0.2)

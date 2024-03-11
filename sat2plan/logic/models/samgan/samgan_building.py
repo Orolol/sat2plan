@@ -61,7 +61,7 @@ class ContentEncoder(nn.Module):
         return out
 
 class StyleEncoder(nn.Module):
-    def __init__(self, in_channels, num_maps):
+    def __init__(self, in_channels):
         super(StyleEncoder, self).__init__()
         self.convs = nn.ModuleList([
             nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -109,10 +109,10 @@ class Decoder(nn.Module):
         return out
 
 class SAM_GAN(nn.Module):
-    def __init__(self, in_channels, out_channels, num_maps, reduction_ratio=16, num_residual_blocks=7):
+    def __init__(self, in_channels=3, out_channels=3, reduction_ratio=16, num_residual_blocks=7):
         super(SAM_GAN, self).__init__()
         self.content_encoder = ContentEncoder(in_channels, num_residual_blocks)
-        self.style_encoder = StyleEncoder(out_channels, num_maps)
+        self.style_encoder = StyleEncoder(out_channels)
         self.decoder = Decoder(64, out_channels)
 
     def forward(self, content_img, style_imgs):

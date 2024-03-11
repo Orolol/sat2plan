@@ -30,14 +30,13 @@ def train_unet():
 
 def train_ucvgan():
 
-    data_bucket = 'data-1k'
+    data_bucket = 'data-10k'
     # export_params_txt()
 
     print(Fore.YELLOW + "Training UCVGan" + Style.RESET_ALL)
-    download_bucket_folder(data_bucket, val_size=0.1)
+    download_bucket_folder(data_bucket, val_size=0.05)
 
     print("Running unet training")
-    # train_model(data_bucket=data_bucket)
     ucvgan = UCVGan(data_bucket=data_bucket)
     ucvgan.train()
 

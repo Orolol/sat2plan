@@ -172,6 +172,7 @@ class SAMGAN():
                 self.Dis_loss.append(D_loss.item())
                 D_loss.backward()
                 self.OptimizerD.step()
+                torch.cuda.empty_cache()
 
                 ############## Train Generator ##############
 
@@ -185,6 +186,7 @@ class SAMGAN():
                 self.OptimizerG.zero_grad()
                 G_loss.backward(retain_graph=True)
                 self.OptimizerG.step()
+                torch.cuda.empty_cache()
 
                 print(
                     "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"

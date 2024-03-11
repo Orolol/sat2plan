@@ -37,7 +37,8 @@ class Discriminator(nn.Module):
     def forward(self, x, y):
         # X = Correct Satellite Image
         # Y = Correct/Fake Image
-
+        # print("X", x.shape)
+        # print("Y", y.shape)
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
         return self.model(x)
@@ -49,7 +50,7 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self,  kernel_size=4, stride=2, padding=1, in_channels=3, features=64):
+    def __init__(self,  kernel_size=4, stride=2, padding=1, in_channels=3, features=48):
         super().__init__()
         self.initial_down = nn.Sequential(
             nn.Conv2d(in_channels, features, kernel_size,
@@ -66,8 +67,8 @@ class Generator(nn.Module):
                                act="leaky", use_dropout=False)  # 32 X 32
         self.down3 = ConvBlock(features*4, features*8, down=True,
                                act="leaky", use_dropout=False)  # 16 X 16
-        self.down4 = ConvBlock(features*8, features*8 * 2, down=True,
-                               act="leaky", use_dropout=False)  # 8 X 8
+        self.down4 = ConvBlock(features*8, features*8, stride=1, padding=1, kernel_size=3, down=True,
+                               act="leaky", use_dropout=False)  # 16 X 16
 
         ##############################################################################
         ################################# BOTTLENECK #################################
@@ -79,8 +80,8 @@ class Generator(nn.Module):
         # )
 
         self.bottleneck = PixelwiseViT(
-            features * 8 * 2, 8, 12, 1536, 384,
-            image_shape=(3, 128, 128),
+            features * 8, 8, 4, 1536, 384,
+            image_shape=(384, 8, 8),
             rezero=True
         )
 
@@ -88,33 +89,52 @@ class Generator(nn.Module):
         ################################## DECODEUR ##################################
         ##############################################################################
 
-        self.up4 = ConvBlock(features*8*2, features*8, down=False,
+        self.up3 = ConvBlock(features * 8, features*8, down=False,
+                             act="relu", use_dropout=False)   # 16 * 16
+        self.up4 = ConvBlock(features*12, features*8, down=False,
+                             act="relu", use_dropout=False)   # 16 * 16
+        self.up5 = ConvBlock(features*10, features*4, down=False,
                              act="relu", use_dropout=False)
-        self.up5 = ConvBlock(features*8*2, features*4, down=False,
+        self.up6 = ConvBlock(features*5, features*2, down=False,
                              act="relu", use_dropout=False)
-        self.up6 = ConvBlock(features*4*2, features*2, down=False,
-                             act="relu", use_dropout=False)
-        self.up7 = ConvBlock(features*2*2, features, down=False,
+        self.up7 = ConvBlock(features*2, features, down=False,
                              act="relu", use_dropout=False)
         self.final_up = nn.Sequential(
-            nn.ConvTranspose2d(features*2, in_channels,
-                               kernel_size, stride, padding),
+            nn.ConvTranspose2d(features * 2, in_channels,
+                               kernel_size=3, stride=1, padding=1),
             nn.Tanh()
         )
 
     def forward(self, x):
         d1 = self.initial_down(x)
+        # print(1)
         d2 = self.down1(d1)
+        # print(2)
         d3 = self.down2(d2)
+        # print(3)
         d4 = self.down3(d3)
+        # print(4)
         d5 = self.down4(d4)
-
+        # print(5)
+        # print("D5", d5.shape)
         bottleneck = self.bottleneck(d5)
+        # print(6)
+        # up4 = self.up4(torch.cat([up1, d5], 1))
+        up1 = self.up3(bottleneck)
+        # print("UP1", up1.shape)
+        # print("d5", d5.shape)
+        # print("D4", d4.shape)
+        # print("d3", d3.shape)
+        # print("d2", d2.shape)
+        # print("d1", d1.shape)
+        up3 = self.up4(torch.cat([up1, d3], 1))
+        up4 = self.up5(torch.cat([up3, d2], 1))
+        up5 = self.up6(torch.cat([up4, d1], 1))
+        # print("UP5", up5.shape)
 
-        up1 = self.up1(bottleneck)
-        up4 = self.up4(torch.cat([up1, d5], 1))
-        up5 = self.up5(torch.cat([up4, d4], 1))
-        up6 = self.up6(torch.cat([up5, d3], 1))
-        up7 = self.up7(torch.cat([up6, d2], 1))
+        # up6 = self.up7(up5)
+        # print("UP6", up6.shape)
 
-        return self.final_up(torch.cat([up7, d1], 1))
+        result = self.final_up(up5)
+        # print("FINAL G", result.shape)
+        return result

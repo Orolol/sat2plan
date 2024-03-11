@@ -19,6 +19,8 @@ class CNN_Block(nn.Module):
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels,  kernel_size=4, stride=2, padding=1, down=True, act="relu", use_dropout=False):
         super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride,
                       padding, bias=False, padding_mode="reflect")
@@ -31,6 +33,7 @@ class ConvBlock(nn.Module):
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
+        # print("CONVBLOCK", x.shape, self.in_channels, self.out_channels)
         x = self.conv(x)
         return self.dropout(x) if self.use_dropout else x
 
@@ -125,6 +128,7 @@ class FourierEmbedding(nn.Module):
         self.projector = nn.Linear(2, features)
         self._height = height
         self._width = width
+        # print("fourier embedding params", features, height, width)
 
     def forward(self, y, x):
         # x : (N, L)
@@ -147,15 +151,16 @@ class ViTInput(nn.Module):
         super().__init__(**kwargs)
         self._height = height
         self._width = width
-        print("vitinput params", input_features, embed_features,
-              height, width, embed_features, features)
+        # print("vitinput params", input_features, embed_features,
+        #   height, width, embed_features, features)
         x = torch.arange(width).to(torch.float32)
         y = torch.arange(height).to(torch.float32)
-
+        # print("X", x.shape, "Y", y.shape)
         x, y = torch.meshgrid(x, y)
+        # print("X", x.shape, "Y", y.shape)
         self.x = x.reshape((1, -1))
         self.y = y.reshape((1, -1))
-
+        # print("X", self.x.shape, "Y", self.y.shape)
         self.register_buffer('x_const', self.x)
         self.register_buffer('y_const', self.y)
 
@@ -166,23 +171,23 @@ class ViTInput(nn.Module):
         # x     : (N, L, input_features)
         # embed : (1, height * width, embed_features)
         #       = (1, L, embed_features)
-        print("X entrée de vit input", x.shape)
-        print(self.y_const.shape, self.x_const.shape)
+        # print("X entrée de vit input", x.shape)
+        # print(self.y_const.shape, self.x_const.shape)
         embed = self.embed(self.y_const, self.x_const)
-        print("EMBED", embed.shape)
+        # print("EMBED", embed.shape)
         # embed : (1, L, embed_features)
         #      -> (N, L, embed_features)
         embed = embed.expand((x.shape[0], *embed.shape[1:]))
-        print("EMBED2", embed.shape)
-        x = nn.Flatten()(x)
+        # print("EMBED2", embed.shape)
+        # x = nn.Flatten()(x)
         # expand on the last dimension
-        x = x.unsqueeze(-1)
-        x = x.expand((*x.shape[:2], 3))
-        print("X", x.shape)
+        # x = x.unsqueeze(-1)
+        # x = x.expand((*x.shape[:2], 3))
+        # print("X", x.shape)
         # x = x.view(x.shape[0], x.shape[-1], -1)
         # result : (N, L, embed_features + input_features)
         result = torch.cat([embed, x], dim=2)
-        print("RESULT", result.shape)
+        # print("RESULT", result.shape)
         # (N, L, features)
         return self.output(result)
 
@@ -193,7 +198,9 @@ class PixelwiseViT(nn.Module):
         self, features, n_heads, n_blocks, ffn_features, embed_features, image_shape, rezero=True, **kwargs
     ):
         super().__init__(**kwargs)
-
+        # print('DDDDDDDDDDDDDDDD')
+        # print(features, n_heads, n_blocks,
+        #       ffn_features, embed_features, image_shape)
         self.image_shape = image_shape
 
         self.trans_input = ViTInput(
@@ -204,26 +211,25 @@ class PixelwiseViT(nn.Module):
         self.encoder = TransformerEncoder(
             features, ffn_features, n_heads, n_blocks, rezero
         )
-
         self.trans_output = nn.Linear(features, image_shape[0])
 
     def forward(self, x):
         # x : (N, C, H, W)
-        print("X", x.shape)
+        # print("X", x.shape)
         # itokens : (N, C, H * W)
         itokens = x.view(*x.shape[:2], -1)
 
-        print("ITOKENS", itokens.shape)
+        # print("ITOKENS", itokens.shape)
 
         # itokens : (N, C,     H * W)
         #        -> (N, H * W, C    )
         #         = (N, L,     C)
         itokens = itokens.permute((0, 2, 1))
 
-        print("ITOKENS2", itokens.shape)
+        # print("ITOKENS2", itokens.shape)
         # flatten itoken
         # itokens = nn.Flatten()(itokens)
-        print("flatten", itokens.shape)
+        # print("flatten", itokens.shape)
         # y : (N, L, features)
         y = self.trans_input(itokens)
         y = self.encoder(y)
@@ -238,7 +244,7 @@ class PixelwiseViT(nn.Module):
 
         # result : (N, C, H, W)
         result = otokens.view(*otokens.shape[:2], *self.image_shape[1:])
-
+        # print("RESULT OUTPUT", result.shape)
         return result
 
 

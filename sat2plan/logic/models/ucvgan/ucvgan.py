@@ -167,10 +167,11 @@ class UCVGan():
                 G_loss.backward()
                 self.OptimizerG.step()
 
-                print(
-                    "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                    % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
-                )
+                if idx % 100 == 0:
+                    print(
+                        "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+                        % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
+                    )
 
                 # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
 
@@ -183,7 +184,7 @@ class UCVGan():
                     save_image(concatenated_images, "images/%d.png" %
                                epoch, nrow=3, normalize=True)
 
-            if epoch != 0 and (epoch+1) % 5 == 0:
+            if epoch != 0:
                 print("-- Test de validation --")
                 self.validation()
                 print(f"Epoch : {epoch+1}/{self.n_epochs} :")

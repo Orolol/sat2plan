@@ -141,8 +141,8 @@ class SAM_GAN(nn.Module):
         self.style_encoder = StyleEncoder(out_channels)
         self.decoder = Decoder(64, out_channels, out_channels)  # Passer out_channels à Decoder
 
-    def forward(self, content_img, style_imgs=0):
-        if style_imgs == 0:
+    def forward(self, content_img, style_imgs=None):
+        if style_imgs is None:
             content_features = self.content_encoder(content_img)
             style_features = self.style_encoder(content_img)
             return self.decoder(content_features, style_features)

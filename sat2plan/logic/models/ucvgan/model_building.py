@@ -50,7 +50,7 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self,  kernel_size=4, stride=2, padding=1, in_channels=3, features=48):
+    def __init__(self,  kernel_size=4, stride=2, padding=1, in_channels=3, features=64):
         super().__init__()
         self.initial_down = nn.Sequential(
             nn.Conv2d(in_channels, features, kernel_size,
@@ -84,8 +84,8 @@ class Generator(nn.Module):
         # )
 
         self.bottleneck = PixelwiseViT(
-            features * 8, 8, 4, 1536, 384,
-            image_shape=(384, 8, 8),
+            features * 8, 8, 4, 1536, ,
+            image_shape=(features * 8, 8, 8),
             rezero=True
         )
 

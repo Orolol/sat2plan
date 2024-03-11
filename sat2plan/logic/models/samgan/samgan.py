@@ -184,7 +184,7 @@ class SAMGAN():
 
                 # Backward and optimize
                 self.OptimizerG.zero_grad()
-                G_loss.backward(retain_graph=True)
+                G_loss.backward()
                 self.OptimizerG.step()
 
                 print(

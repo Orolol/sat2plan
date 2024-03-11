@@ -178,10 +178,10 @@ class Unet():
 
                 if idx == 0:
                     concatenated_images = torch.cat(
-                        (x[:-1], y_fake[:-1], y[:-1]), dim=2)
+                        (x[:], y_fake[:], y[:]), dim=2)
 
                     save_image(concatenated_images, "images/%d.png" %
-                               batches_done, nrow=3, normalize=True)
+                               epoch, nrow=3, normalize=True)
 
             if epoch != 0 and (epoch+1) % 5 == 0:
                 print("-- Test de validation --")

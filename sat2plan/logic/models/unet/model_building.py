@@ -67,8 +67,12 @@ class Generator(nn.Module):
                                act="leaky", use_dropout=False)  # 32 X 32
         self.down3 = ConvBlock(features*4, features*8, down=True,
                                act="leaky", use_dropout=False)  # 16 X 16
-        self.down4 = ConvBlock(features*8, features*8, stride=1, padding=1, kernel_size=3, down=True,
+        self.down4 = ConvBlock(features*8, features*8, down=True,
                                act="leaky", use_dropout=False)  # 16 X 16
+        self.down5 = ConvBlock(features*8, features*8, down=True,
+                               act="leaky", use_dropout=False)  # 16 X 16
+        # self.down4 = ConvBlock(features*8, features*8, stride=1, padding=1, kernel_size=3, down=True,
+        #                        act="leaky", use_dropout=False)  # 16 X 16
 
         ##############################################################################
         ################################# BOTTLENECK #################################
@@ -91,17 +95,17 @@ class Generator(nn.Module):
 
         self.up3 = ConvBlock(features * 8, features*8, down=False,
                              act="relu", use_dropout=False)   # 16 * 16
-        self.up4 = ConvBlock(features*12, features*8, down=False,
+        self.up4 = ConvBlock(features*16, features*8, down=False,
                              act="relu", use_dropout=False)   # 16 * 16
-        self.up5 = ConvBlock(features*10, features*4, down=False,
+        self.up5 = ConvBlock(features*16, features*8, down=False,
                              act="relu", use_dropout=False)
-        self.up6 = ConvBlock(features*5, features*2, down=False,
+        self.up6 = ConvBlock(features*12, features*4, down=False,
                              act="relu", use_dropout=False)
-        self.up7 = ConvBlock(features*2, features, down=False,
+        self.up7 = ConvBlock(features*6, features*2, down=False,
                              act="relu", use_dropout=False)
         self.final_up = nn.Sequential(
             nn.ConvTranspose2d(features * 2, in_channels,
-                               kernel_size=3, stride=1, padding=1),
+                               kernel_size=4, stride=2, padding=1),
             nn.Tanh()
         )
 
@@ -117,7 +121,9 @@ class Generator(nn.Module):
         d5 = self.down4(d4)
         # print(5)
         # print("D5", d5.shape)
-        bottleneck = self.bottleneck(d5)
+        d6 = self.down5(d5)
+        # print("D6", d6.shape)
+        bottleneck = self.bottleneck(d6)
         # print(6)
         # up4 = self.up4(torch.cat([up1, d5], 1))
         up1 = self.up3(bottleneck)
@@ -127,14 +133,16 @@ class Generator(nn.Module):
         # print("d3", d3.shape)
         # print("d2", d2.shape)
         # print("d1", d1.shape)
-        up3 = self.up4(torch.cat([up1, d3], 1))
-        up4 = self.up5(torch.cat([up3, d2], 1))
-        up5 = self.up6(torch.cat([up4, d1], 1))
+        up3 = self.up4(torch.cat([up1, d5], 1))
+        # print("UP3", up3.shape)
+        up4 = self.up5(torch.cat([up3, d4], 1))
+        # print("UP4", up4.shape)
+        up5 = self.up6(torch.cat([up4, d3], 1))
         # print("UP5", up5.shape)
 
-        # up6 = self.up7(up5)
-        # print("UP6", up6.shape)
+        up6 = self.up7(torch.cat([up5, d2], 1))
+        # # print("UP6", up6.shape)
 
-        result = self.final_up(up5)
+        result = self.final_up(up6)
         # print("FINAL G", result.shape)
         return result

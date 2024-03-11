@@ -152,7 +152,7 @@ class ViTInput(nn.Module):
         self._height = height
         self._width = width
         # print("vitinput params", input_features, embed_features,
-        #   height, width, embed_features, features)
+        #     height, width, embed_features, features)
         x = torch.arange(width).to(torch.float32)
         y = torch.arange(height).to(torch.float32)
         # print("X", x.shape, "Y", y.shape)
@@ -200,7 +200,7 @@ class PixelwiseViT(nn.Module):
         super().__init__(**kwargs)
         # print('DDDDDDDDDDDDDDDD')
         # print(features, n_heads, n_blocks,
-        #       ffn_features, embed_features, image_shape)
+        #     ffn_features, embed_features, image_shape)
         self.image_shape = image_shape
 
         self.trans_input = ViTInput(

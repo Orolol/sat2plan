@@ -29,7 +29,7 @@ def weights_init_normal(m):
 
 
 class Generator(nn.Module):
-    def __init__(self, img_size=512, latent_dim=100, channels=3):
+    def __init__(self, img_size=512, latent_dim=3, channels=3):
         super(Generator, self).__init__()
 
         # self.init_size = img_size // 4
@@ -164,8 +164,8 @@ def run_dcgan():
 
     Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
-    netG = Generator().cuda()
-    netD = Discriminator().cuda()
+    netG = Generator().cuda().apply(weights_init_normal)
+    netD = Discriminator().cuda().apply(weights_init_normal)
     BCE_Loss = nn.BCEWithLogitsLoss().cuda()
     OptimizerD = torch.optim.Adam(
         discriminator.parameters(), lr=lr, betas=(b1, b2))

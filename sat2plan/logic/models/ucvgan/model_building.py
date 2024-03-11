@@ -84,7 +84,7 @@ class Generator(nn.Module):
         # )
 
         self.bottleneck = PixelwiseViT(
-            features * 8, 8, 4, 1536, ,
+            features * 8, 8, 4, 1536, features * 8,
             image_shape=(features * 8, 8, 8),
             rezero=True
         )

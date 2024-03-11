@@ -18,7 +18,7 @@ from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, exp
 # Modèle Unet
 
 
-class Unet():
+class Resnet():
     def __init__(self, data_bucket='data-1k'):
 
         # Import des paramètres globaux

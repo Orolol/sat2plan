@@ -29,7 +29,7 @@ def weights_init_normal(m):
 
 
 class Generator(nn.Module):
-    def __init__(self, img_size=512, latent_dim=3, channels=3):
+    def __init__(self, img_size=512, latent_dim=100, channels=3):
         super(Generator, self).__init__()
 
         # self.init_size = img_size // 4
@@ -40,7 +40,7 @@ class Generator(nn.Module):
 
         self.conv_blocks = nn.Sequential(
             # nn.Upsample(scale_factor=2),
-            nn.Conv2d(channels, 128, 3, stride=1, padding=1),
+            nn.Conv2d(latent_dim, 128, 3, stride=1, padding=1),
             nn.BatchNorm2d(128, 0.8),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(128, 128, 3, stride=1, padding=1),
@@ -109,7 +109,7 @@ def run_dcgan():
     b2 = 0.999
     n_cpu = 6
     latent_dim = 100
-    img_size = 256
+    img_size = 512
     channels = 3
     sample_interval = 10
     from_scratch = True

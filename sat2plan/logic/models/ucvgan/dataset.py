@@ -27,6 +27,8 @@ transform_only_mask = A.Compose(
     ]
 )
 
+img_to_save = ['000363_Paris_48.88108_2.33803.png']
+
 
 class Satellite2Map_Data(Dataset):
     def __init__(self, root):
@@ -44,6 +46,9 @@ class Satellite2Map_Data(Dataset):
             if torch.is_tensor(idx):
                 idx = idx.tolist()
             image_name = self.n_samples[idx]
+            to_save = False
+            if image_name in img_to_save:
+                to_save = True
             # print(self.n_samples)
             image_path = os.path.join(self.root, image_name)
             image = np.asarray(Image.open(image_path).convert('RGB'))
@@ -63,7 +68,7 @@ class Satellite2Map_Data(Dataset):
             # if self.transform!=None:
             #     satellite_image = self.transform(satellite_image)
             #     map_image = self.transform(map_image)
-            return (satellite_image, map_image)
+            return (satellite_image, map_image, to_save)
         except:
             if torch.is_tensor(idx):
                 idx = idx.tolist()

@@ -1,9 +1,11 @@
 import os
 
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
+from torchsummary import summary
 
 from sat2plan.logic.models.ucvgan.global_config import Global_Configuration
 from sat2plan.logic.models.ucvgan.model_config import Model_Configuration
@@ -86,11 +88,13 @@ class UCVGan():
 
         self.netD = Discriminator(in_channels=3)
         self.netG = Generator(in_channels=3)
+        self.starting_epoch = 0
 
         if self.load_model:
-            model_and_optimizer = load_model()
+            model_and_optimizer, epoch = load_model()
             self.netG.load_state_dict(model_and_optimizer['gen_state_dict'])
             self.netD.load_state_dict(model_and_optimizer['disc_state_dict'])
+            self.starting_epoch = epoch
 
         # Check Cuda
         self.cuda = True if torch.cuda.is_available() else False
@@ -125,10 +129,17 @@ class UCVGan():
     # Train & save models
     def train(self):
         # Création du fichier params.json
+        os.makedirs("save", exist_ok=True)
         params_json = open("params.json", mode="w", encoding='UTF-8')
+        pytorch_total_params_G = sum(
+            p.numel() for p in self.netG.parameters() if p.requires_grad)
+        pytorch_total_params_D = sum(
+            p.numel() for p in self.netD.parameters() if p.requires_grad)
+        print("Total params in Generator :", pytorch_total_params_G)
+        print("Total params in Discriminator :", pytorch_total_params_D)
 
-        for epoch in range(self.n_epochs):
-            for idx, (x, y) in enumerate(self.train_dl):
+        for epoch in range(self.starting_epoch, self.n_epochs):
+            for idx, (x, y, to_save) in enumerate(self.train_dl):
 
                 if self.cuda:
                     x = x .cuda()
@@ -138,6 +149,10 @@ class UCVGan():
 
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.netG(x)
+                if to_save:
+                    save_image(y_fake, f"save/y_gen_{epoch}_{idx}.png")
+                    save_image(x, f"save/input_{epoch}_{idx}.png")
+                    save_image(y, f"save/label_{epoch}_{idx}.png")
                 # print("NETD0", x.shape, y.shape)
                 D_real = self.netD(x, y)
                 D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
@@ -172,6 +187,11 @@ class UCVGan():
                         "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
                         % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
                     )
+                    concatenated_images = torch.cat(
+                        (x[:], y_fake[:], y[:]), dim=2)
+
+                    save_image(concatenated_images, "images/%d.png" %
+                               str(epoch) + "-" + str(batches_done), nrow=3, normalize=True)
 
                 # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
 

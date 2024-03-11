@@ -118,6 +118,7 @@ class SAM_GAN(nn.Module):
     def forward(self, content_img, style_imgs):
         content_features = self.content_encoder(content_img)
         style_features = self.style_encoder(style_imgs)
+        print(content_features.size(), style_features.size())
         combined_space = content_features + style_features  # À adapter selon l'architecture exacte
         y_fake = F.interpolate(self.decoder(combined_space), size=(512, 512), mode='bilinear', align_corners=False)
         return y_fake

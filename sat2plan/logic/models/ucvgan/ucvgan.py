@@ -104,7 +104,7 @@ class UCVGan():
         # Check TPU
         self.device = xm.xla_device()
         print("CHECK DEVICE", self.device)
-        if self.tpu:
+        if self.device:
             self.netD = self.netD.to(self.device)
             self.netG = self.netG.to(self.device)
 

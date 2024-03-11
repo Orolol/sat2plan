@@ -163,9 +163,9 @@ def run_dcgan():
 
     Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
-    netG = Generator()
-    netD = Discriminator()
-    BCE_Loss = nn.BCEWithLogitsLoss()
+    netG = Generator().cuda().apply(weights_init_normal)
+    netD = Discriminator().cuda().apply(weights_init_normal)
+    BCE_Loss = nn.BCEWithLogitsLoss().cuda()
     OptimizerD = torch.optim.Adam(
         discriminator.parameters(), lr=lr, betas=(b1, b2))
     OptimizerG = torch.optim.Adam(
@@ -251,7 +251,6 @@ def run_dcgan():
             ############## Train Generator ##############
 
             # Loss measures generator's ability to fool the discriminator
-            D_fake = netD(x, y_fake)
             G_fake_loss = BCE_Loss(D_fake, torch.ones_like(D_fake))
             Gen_loss.append(G_fake_loss.item())
 

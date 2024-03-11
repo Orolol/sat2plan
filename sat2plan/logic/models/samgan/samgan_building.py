@@ -171,7 +171,7 @@ class SAM_GAN(nn.Module):
         style_features = self.style_encoder(style_imgs)
         y_fake = self.decoder(content_features, style_features)
         x = self.discriminator(style_imgs, y_fake)
-        return x
+        return (x, y_fake)
 
 
 """class SeBlock(nn.Module):

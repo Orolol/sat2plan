@@ -162,7 +162,7 @@ class SAMGAN():
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.sam_gan(x, y)[1]
                 G_fake_loss = self.BCE_Loss(y_fake, y)
-                sam_gan_loss = self.adversarial_loss(y_fake, y) + self.content_loss(y_fake, y) + self.style_loss(y_fake,y)
+                sam_gan_loss = G_fake_loss + self.content_loss(y_fake, y) + self.style_loss(y_fake,y)
                 self.Gen_loss.append(sam_gan_loss.item())
 
                 # Backward and optimize

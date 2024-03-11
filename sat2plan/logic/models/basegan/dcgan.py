@@ -235,10 +235,10 @@ def run_dcgan():
             ############## Train Discriminator ##############
 
             # Measure discriminator's ability to classify real from generated samples
-            y_fake = netG(x)
-            D_real = netD(x, y)
+            y_fake = netG(sat)
+            D_real = netD(sat, real_imgs)
             D_real_loss = BCE_Loss(D_real, torch.ones_like(D_real))
-            D_fake = netD(x, y_fake.detach())
+            D_fake = netD(sat, y_fake.detach())
             D_fake_loss = BCE_Loss(D_fake, torch.zeros_like(D_fake))
             D_loss = (D_real_loss + D_fake_loss)/2
 

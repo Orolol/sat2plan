@@ -22,6 +22,123 @@ class SeBlock(nn.Module):
         y = self.fc(y).view(b, c, 1, 1)
         return x * y
 
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.norm = nn.InstanceNorm2d(out_channels, affine=True)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        residual = x
+        out = self.relu(self.norm(self.conv1(x)))
+        out = self.norm(self.conv2(out))
+        out += residual
+        return out
+
+class ContentEncoder(nn.Module):
+    def __init__(self, in_channels, num_residual_blocks=7):
+        super(ContentEncoder, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=7, stride=1, padding=3)
+        self.norm1 = nn.InstanceNorm2d(64, affine=True)
+        self.relu = nn.ReLU(inplace=True)
+        self.se_block = SeBlock(64)
+        self.downsampling = nn.Sequential(
+            *[nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
+              nn.InstanceNorm2d(64, affine=True),
+              nn.ReLU(inplace=True)]
+        )
+        self.residual_blocks = nn.Sequential(
+            *[ResidualBlock(64, 64) for _ in range(num_residual_blocks)]
+        )
+
+    def forward(self, x):
+        out = self.relu(self.norm1(self.conv1(x)))
+        out = self.se_block(out)
+        out = self.downsampling(out)
+        out = self.residual_blocks(out)
+        return out
+
+class StyleEncoder(nn.Module):
+    def __init__(self, in_channels, num_maps):
+        super(StyleEncoder, self).__init__()
+        self.convs = nn.ModuleList([
+            nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True)
+        ])
+        for _ in range(3):
+            self.convs.extend([
+                nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
+                nn.ReLU(inplace=True)
+            ])
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Linear(64, in_channels)
+
+    def forward(self, x):
+        for conv in self.convs:
+            x = conv(x)
+        x = self.avg_pool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
+class Decoder(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(Decoder, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
+        self.norm1 = nn.InstanceNorm2d(64, affine=True)
+        self.relu = nn.ReLU(inplace=True)
+        self.residual_blocks = nn.Sequential(
+            *[ResidualBlock(64, 64) for _ in range(2)]
+        )
+        self.upsampling = nn.Sequential(
+            *[nn.ConvTranspose2d(64, 64, kernel_size=3, stride=2, padding=1, output_padding=1),
+              nn.InstanceNorm2d(64, affine=True),
+              nn.ReLU(inplace=True)]
+        )
+        self.conv2 = nn.Conv2d(64, out_channels, kernel_size=7, stride=1, padding=3)
+        self.norm2 = nn.InstanceNorm2d(out_channels, affine=True)
+        self.tanh = nn.Tanh()
+
+    def forward(self, x):
+        out = self.relu(self.norm1(self.conv1(x)))
+        out = self.residual_blocks(out)
+        out = self.upsampling(out)
+        out = self.tanh(self.norm2(self.conv2(out)))
+        return out
+
+class SAM_GAN(nn.Module):
+    def __init__(self, in_channels, out_channels, num_maps, reduction_ratio=16, num_residual_blocks=7):
+        super(SAM_GAN, self).__init__()
+        self.content_encoder = ContentEncoder(in_channels, num_residual_blocks)
+        self.style_encoder = StyleEncoder(out_channels, num_maps)
+        self.decoder = Decoder(64, out_channels)
+
+    def forward(self, content_img, style_imgs):
+        content_features = self.content_encoder(content_img)
+        style_features = self.style_encoder(style_imgs)
+        y_fake = self.decoder(content_features, style_features)
+        return y_fake
+
+
+"""class SeBlock(nn.Module):
+    def __init__(self, in_channels, reduction_ratio=16):
+        super(SeBlock, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(in_channels, in_channels // reduction_ratio),
+            nn.ReLU(inplace=True),
+            nn.Linear(in_channels // reduction_ratio, in_channels),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.avg_pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y
+
 class SelfAttention(nn.Module):
     def __init__(self, in_channels, reduction_ratio=8):
         super(SelfAttention, self).__init__()
@@ -93,7 +210,7 @@ class ContentEncoder(nn.Module):
 
         self.conv_layers = nn.Sequential(
             PCIR(3, 64, kernel_size=4, padding=2),
-            SelfAttention(64),
+            #SelfAttention(64),
             PCIR(64, 128, kernel_size=3, padding=1),
             #SelfAttention(128),
             nn.MaxPool2d(kernel_size=2, stride=2),
@@ -115,7 +232,7 @@ class StyleEncoder(nn.Module):
         self.conv_layers = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=4, padding=2),
             nn.ReLU(inplace=True),
-            SelfAttention(64),
+            #SelfAttention(64),
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             #SelfAttention(128),
@@ -164,7 +281,7 @@ class SAM_GAN(nn.Module):
         style_space = self.style_encoder(y)
         combined_space = content_space + style_space  # À adapter selon l'architecture exacte
         y_fake = F.interpolate(self.decoder(combined_space), size=(512, 512), mode='bilinear', align_corners=False)
-        return y_fake
+        return y_fake"""
 
 class Discriminator(nn.Module):
     def __init__(self, kernel_size=4, stride=2, padding=2, in_channels=3, features=[64, 64, 64]):

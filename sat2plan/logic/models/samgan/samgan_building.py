@@ -5,17 +5,39 @@ import torch.nn.functional as F
 from sat2plan.logic.models.blocks.blocks import CNN_Block
 
 
+class SeBlock(nn.Module):
+    def __init__(self, in_channels, reduction_ratio=16):
+        super(SeBlock, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(in_channels, in_channels // reduction_ratio),
+            nn.ReLU(inplace=True),
+            nn.Linear(in_channels // reduction_ratio, in_channels),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.avg_pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y
+
 class SelfAttention(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, reduction_ratio=8):
         super(SelfAttention, self).__init__()
 
-        self.query_conv = nn.Conv2d(in_channels, in_channels // 8, kernel_size=1)
-        self.key_conv = nn.Conv2d(in_channels, in_channels // 8, kernel_size=1)
+        self.se_block = SeBlock(in_channels)
+
+        self.query_conv = nn.Conv2d(in_channels, in_channels // reduction_ratio, kernel_size=1)
+        self.key_conv = nn.Conv2d(in_channels, in_channels // reduction_ratio, kernel_size=1)
         self.value_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1)
         self.gamma = nn.Parameter(torch.zeros(1))
 
     def forward(self, x):
         batch_size, channels, height, width = x.size()
+
+        # Channel attention
+        x = self.se_block(x)
 
         # Project features to query, key, and value with smaller channels
         proj_query = self.query_conv(x)

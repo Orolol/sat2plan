@@ -11,3 +11,4 @@ google-cloud-storage
 mlflow
 python-dotenv
 albumentations
+torch_xla

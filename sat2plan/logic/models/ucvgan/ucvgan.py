@@ -2,6 +2,8 @@ import os
 
 import torch
 import torch.nn as nn
+import torch_xla
+import torch_xla.core.xla_model as xm
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
@@ -99,6 +101,13 @@ class UCVGan():
             self.netD = self.netD.cuda()
             self.netG = self.netG.cuda()
 
+        # Check TPU
+        self.device = xm.xla_device()
+        print("CHECK DEVICE", self.device)
+        if self.tpu:
+            self.netD = self.netD.to(self.device)
+            self.netG = self.netG.to(self.device)
+
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
@@ -133,6 +142,10 @@ class UCVGan():
                 if self.cuda:
                     x = x .cuda()
                     y = y.cuda()
+
+                if self.device:
+                    x = x.to(self.device)
+                    y = y.to(self.device)
 
                 ############## Train Discriminator ##############
 

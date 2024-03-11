@@ -16,6 +16,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
+from sat2plan.logic.models.basegan.dataset import Satellite2Map_Data
+
 
 def weights_init_normal(m):
     classname = m.__class__.__name__
@@ -27,7 +29,7 @@ def weights_init_normal(m):
 
 
 class Generator(nn.Module):
-    def __init__(self, img_size=256, latent_dim=100, channels=3):
+    def __init__(self, img_size=512, latent_dim=100, channels=3):
         super(Generator, self).__init__()
 
         # self.init_size = img_size // 4
@@ -56,14 +58,14 @@ class Generator(nn.Module):
         # print("Z", z.shape)
         # out = self.l1(z)
         # out = z.view(z.shape[0], 128, self.init_size, self.init_size)
-        print("OUT", z.shape)
+        #print("OUT", z.shape)
         img = self.conv_blocks(z)
-        print("IMG", img.shape)
+        #print("IMG", img.shape)
         return img
 
 
 class Discriminator(nn.Module):
-    def __init__(self, img_size=256, channels=3):
+    def __init__(self, img_size=512, channels=3):
         self.img_size = img_size
         super(Discriminator, self).__init__()
 
@@ -96,18 +98,17 @@ class Discriminator(nn.Module):
 
 def run_dcgan():
 
-    print("RUNNING DCGAN")
     os.makedirs("images", exist_ok=True)
     os.makedirs("models_checkpoint", exist_ok=True)
 
-    n_epochs = 200
-    batch_size = 16
+    n_epochs = 600
+    batch_size = 1
     lr = 0.0002
     b1 = 0.5
     b2 = 0.999
     n_cpu = 6
     latent_dim = 100
-    img_size = 64
+    img_size = 256
     channels = 3
     sample_interval = 10
     from_scratch = True
@@ -158,6 +159,14 @@ def run_dcgan():
 
     )
 
+    os.makedirs("data", exist_ok=True)
+
+    train_dir = "./data/split/train/data-10k"
+
+    train_dataset = Satellite2Map_Data(root=train_dir)
+    train_dl = DataLoader(train_dataset, batch_size=batch_size,
+                                shuffle=True, pin_memory=True, num_workers=2)
+
     # Optimizers
     optimizer_G = torch.optim.Adam(
         generator.parameters(), lr=lr, betas=(b1, b2))
@@ -171,12 +180,14 @@ def run_dcgan():
     # ----------
     print('Start training')
     for epoch in range(n_epochs):
-        for i, (imgs, _) in enumerate(dataloader):
+        for i, (x, y) in enumerate(train_dl):
 
-            sat = F.interpolate(imgs[:, :, :, :512],
-                                size=(img_size, img_size))
-            plan = F.interpolate(imgs[:, :, :, 512:],
-                                 size=(img_size, img_size))
+            if cuda:
+                x = x .cuda()
+                y = y.cuda()
+
+            sat = x
+            plan = y
 
             # plt.imshow(plan[0].permute(1, 2, 0))
             # plt.show()
@@ -184,10 +195,12 @@ def run_dcgan():
             # plt.show()
 
             # Adversarial ground truths
+            '''
             valid = Variable(Tensor(imgs.shape[0], 1).fill_(
                 1.0), requires_grad=False)
             fake = Variable(Tensor(imgs.shape[0], 1).fill_(
                 0.0), requires_grad=False)
+            '''
             # Configure input
             real_imgs = plan
 
@@ -203,7 +216,8 @@ def run_dcgan():
                 print("Error", e)
 
             # Loss measures generator's ability to fool the discriminator
-            g_loss = adversarial_loss(discriminator(gen_imgs), valid)
+            D_fake = discriminator(gen_imgs).detach()
+            g_loss = Variable(adversarial_loss(D_fake, torch.ones_like(D_fake)), requires_grad=True)
             g_loss.backward()
             optimizer_G.step()
             # ---------------------
@@ -213,16 +227,16 @@ def run_dcgan():
             optimizer_D.zero_grad()
 
             # Measure discriminator's ability to classify real from generated samples
-            real_loss = adversarial_loss(discriminator(real_imgs), valid)
-            fake_loss = adversarial_loss(
-                discriminator(gen_imgs.detach()), fake)
-            d_loss = (real_loss + fake_loss) / 2
+            D_real = discriminator(real_imgs).detach()
+            real_loss = adversarial_loss(D_real, torch.ones_like(D_real))
+            fake_loss = adversarial_loss(D_fake, torch.zeros_like(D_fake))
+            d_loss = Variable((real_loss + fake_loss) / 2, requires_grad=True)
             d_loss.backward()
             optimizer_D.step()
 
             print(
                 "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                % (epoch, n_epochs, i, len(dataloader), d_loss.item(), g_loss.item())
+                % (epoch+1, n_epochs, i+1, len(train_dl), d_loss.item(), g_loss.item())
             )
 
             # Sauvegarder l'image
@@ -232,7 +246,7 @@ def run_dcgan():
             batches_done = epoch * len(dataloader) + i
             if batches_done % sample_interval == 0:
                 concatenated_images = torch.cat(
-                    (gen_imgs[:-5], sat[:-5], real_imgs[:-5]), dim=2)
+                    (gen_imgs[:], sat[:], real_imgs[:]), dim=2)
 
                 save_image(concatenated_images, "images/%d.png" %
                            batches_done, nrow=5, normalize=True)

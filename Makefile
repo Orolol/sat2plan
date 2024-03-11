@@ -7,5 +7,5 @@ reinstall_package:
 run_train_unet:
 	python3 -c 'from sat2plan.interface.main import train_unet; train_unet()'
 
-
-
+run_train_dcgan:
+	python3 -c 'from sat2plan.interface.main import train_dcgan; train_dcgan()'

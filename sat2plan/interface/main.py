@@ -7,6 +7,7 @@ from dateutil.parser import parse
 
 from sat2plan.logic.preproc.data import download_bucket_folder
 from sat2plan.logic.preproc.sauvegarde_params import export_params_txt
+from sat2plan.logic.models.ucvgan.ucvgan import UCVGan
 from sat2plan.logic.models.unet.unet import Unet
 
 
@@ -23,6 +24,22 @@ def train_unet():
     # train_model(data_bucket=data_bucket)
     unet = Unet(data_bucket=data_bucket)
     unet.train()
+
+# @mlflow_run
+
+
+def train_ucvgan():
+
+    data_bucket = 'data-1k'
+    # export_params_txt()
+
+    print(Fore.YELLOW + "Training UCVGan" + Style.RESET_ALL)
+    download_bucket_folder(data_bucket, val_size=0.1)
+
+    print("Running unet training")
+    # train_model(data_bucket=data_bucket)
+    ucvgan = UCVGan(data_bucket=data_bucket)
+    ucvgan.train()
 
 
 def pred():

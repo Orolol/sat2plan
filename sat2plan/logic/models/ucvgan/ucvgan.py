@@ -5,12 +5,12 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
-from sat2plan.logic.models.unet.global_config import Global_Configuration
-from sat2plan.logic.models.unet.model_config import Model_Configuration
+from sat2plan.logic.models.ucvgan.global_config import Global_Configuration
+from sat2plan.logic.models.ucvgan.model_config import Model_Configuration
 
-from sat2plan.logic.models.unet.model_building import Generator, Discriminator
+from sat2plan.logic.models.ucvgan.model_building import Generator, Discriminator
 
-from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
+from sat2plan.logic.models.ucvgan.dataset import Satellite2Map_Data
 
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
@@ -18,7 +18,7 @@ from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, exp
 # Modèle Unet
 
 
-class Unet():
+class UCVGan():
     def __init__(self, data_bucket='data-1k'):
 
         # Import des paramètres globaux
@@ -138,8 +138,10 @@ class Unet():
 
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.netG(x)
+                # print("NETD0", x.shape, y.shape)
                 D_real = self.netD(x, y)
                 D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
+                # print("NETD1", x.shape, y_fake.shape)
                 D_fake = self.netD(x, y_fake.detach())
                 D_fake_loss = self.BCE_Loss(D_fake, torch.zeros_like(D_fake))
                 D_loss = (D_real_loss + D_fake_loss)/2
@@ -153,6 +155,7 @@ class Unet():
                 ############## Train Generator ##############
 
                 # Loss measures generator's ability to fool the discriminator
+                # print("NETD", y_fake.shape, y.shape)
                 D_fake = self.netD(x, y_fake)
                 G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
                 L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
@@ -175,10 +178,10 @@ class Unet():
 
                 if idx == 0:
                     concatenated_images = torch.cat(
-                        (x[:-1], y_fake[:-1], y[:-1]), dim=2)
+                        (x[:], y_fake[:], y[:]), dim=2)
 
                     save_image(concatenated_images, "images/%d.png" %
-                            batches_done, nrow=3, normalize=True)
+                               epoch, nrow=3, normalize=True)
 
             if epoch != 0 and (epoch+1) % 5 == 0:
                 print("-- Test de validation --")
@@ -196,7 +199,6 @@ class Unet():
                         "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
                     save_results(params=self.M_CFG, metrics=dict(
                         Gen_loss=G_loss, Dis_loss=D_loss))
-
 
         save_model({"gen": self.netG, "disc": self.netD}, {
             "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")

@@ -147,18 +147,6 @@ def run_dcgan():
     generator.apply(weights_init_normal)
     discriminator.apply(weights_init_normal)
 
-    # Configure data loader
-    dataloader = torch.utils.data.DataLoader(
-        datasets.ImageFolder("sat2plan/data", transform=transforms.Compose([
-            # transforms.Resize(256),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-        ])),
-        batch_size=batch_size,
-        shuffle=True,
-
-    )
-
     os.makedirs("data", exist_ok=True)
 
     train_dir = "./data/split/train/data-10k"
@@ -175,6 +163,16 @@ def run_dcgan():
 
     Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
+    netG = Generator()
+    netD = Discriminator()
+    BCE_Loss = nn.BCEWithLogitsLoss()
+    OptimizerD = torch.optim.Adam(
+        discriminator.parameters(), lr=lr, betas=(b1, b2))
+    OptimizerG = torch.optim.Adam(
+        generator.parameters(), lr=lr, betas=(b1, b2))
+    Dis_loss = []
+    Gen_loss = []
+
     # ----------
     #  Training
     # ----------
@@ -183,7 +181,7 @@ def run_dcgan():
         for i, (x, y) in enumerate(train_dl):
 
             if cuda:
-                x = x .cuda()
+                x = x.cuda()
                 y = y.cuda()
 
             sat = x
@@ -208,7 +206,7 @@ def run_dcgan():
             #  Train Generator
             # -----------------
 
-            optimizer_G.zero_grad()
+            '''optimizer_G.zero_grad()
             # Generate a batch of images
             try:
                 gen_imgs = generator(sat)
@@ -232,21 +230,49 @@ def run_dcgan():
             fake_loss = adversarial_loss(D_fake, torch.zeros_like(D_fake))
             d_loss = Variable((real_loss + fake_loss) / 2, requires_grad=True)
             d_loss.backward()
-            optimizer_D.step()
+            optimizer_D.step()'''
+
+            ############## Train Discriminator ##############
+
+            # Measure discriminator's ability to classify real from generated samples
+            y_fake = netG(x)
+            D_real = netD(x, y)
+            D_real_loss = BCE_Loss(D_real, torch.ones_like(D_real))
+            D_fake = netD(x, y_fake.detach())
+            D_fake_loss = BCE_Loss(D_fake, torch.zeros_like(D_fake))
+            D_loss = (D_real_loss + D_fake_loss)/2
+
+            # Backward and optimize
+            netD.zero_grad()
+            Dis_loss.append(D_loss.item())
+            D_loss.backward()
+            OptimizerD.step()
+
+            ############## Train Generator ##############
+
+            # Loss measures generator's ability to fool the discriminator
+            D_fake = netD(x, y_fake)
+            G_fake_loss = BCE_Loss(D_fake, torch.ones_like(D_fake))
+            Gen_loss.append(G_fake_loss.item())
+
+            # Backward and optimize
+            OptimizerG.zero_grad()
+            G_fake_loss.backward()
+            OptimizerG.step()
 
             print(
                 "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                % (epoch+1, n_epochs, i+1, len(train_dl), d_loss.item(), g_loss.item())
+                % (epoch+1, n_epochs, i+1, len(train_dl), D_loss.item(), G_fake_loss.item())
             )
 
             # Sauvegarder l'image
             # save_image(concatenated_images,
             #            f'gen_images/concatenated_image{epoch}-{i} .jpg')
 
-            batches_done = epoch * len(dataloader) + i
+            batches_done = epoch * len(train_dl) + i
             if batches_done % sample_interval == 0:
                 concatenated_images = torch.cat(
-                    (gen_imgs[:], sat[:], real_imgs[:]), dim=2)
+                    (y_fake[:], sat[:], real_imgs[:]), dim=2)
 
                 save_image(concatenated_images, "images/%d.png" %
                            batches_done, nrow=5, normalize=True)

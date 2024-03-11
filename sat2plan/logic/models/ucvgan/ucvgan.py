@@ -105,6 +105,7 @@ class UCVGan():
         self.device = xm.xla_device()
         print("CHECK DEVICE", self.device)
         if self.device:
+            print("TPU is available")
             self.netD = self.netD.to(self.device)
             self.netG = self.netG.to(self.device)
 
@@ -144,6 +145,7 @@ class UCVGan():
                     y = y.cuda()
 
                 if self.device:
+                    print("y and y to TPU")
                     x = x.to(self.device)
                     y = y.to(self.device)
 

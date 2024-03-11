@@ -116,12 +116,12 @@ class SAMGAN():
 
         self.OptimizerG = torch.optim.Adam(
             self.sam_gan.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
-        self.OptimizerCE = torch.optim.Adam(
+        """self.OptimizerCE = torch.optim.Adam(
             self.content_encoder.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
         self.OptimizerSE = torch.optim.Adam(
             self.style_encoder.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
         self.OptimizerDE = torch.optim.Adam(
-            self.decoder.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+            self.decoder.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))"""
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
 

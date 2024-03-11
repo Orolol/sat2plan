@@ -28,7 +28,7 @@ def train_unet():
 
 def train_sam_gan():
 
-    data_bucket = 'data-1k'
+    data_bucket = 'data-10k'
     # export_params_txt()
 
     print(Fore.YELLOW + "Training sam_gan" + Style.RESET_ALL)

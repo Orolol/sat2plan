@@ -3,7 +3,6 @@ import os
 from PIL import Image
 import shutil
 # from sat2plan.scripts.params import API_KEY
-API_KEY = "AIzaSyANnnEOpfSU_BUn2p8NPbU48LJoG6MbOso"
 
 def coordonnees_gps(ville):
     """

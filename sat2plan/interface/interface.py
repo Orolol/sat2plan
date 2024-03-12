@@ -6,6 +6,11 @@ from PIL import Image
 from streamlit_image_comparison import image_comparison
 # from sat2plan.api.api import conversion_adresse_coordonnees_gps, get_images
 
+
+# test
+
+
+
 def barre_defilement(texte,temps):
     """
     Cette fonction est en charge des barres de défilement pour faire patienter l'utilisateur

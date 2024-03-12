@@ -4,6 +4,11 @@ from PIL import Image
 import shutil
 # from sat2plan.scripts.params import API_KEY
 
+# test
+
+
+
+
 def coordonnees_gps(ville):
     """
     Cette fonction se base sur l'application du Wagon pour obtenir la lattitude et la longitude d'une ville donnée

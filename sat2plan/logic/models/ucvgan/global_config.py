@@ -16,10 +16,10 @@ class Global_Configuration:
         self.n_cpu = 6
 
         self.batch_size = 1
-        self.n_epochs = 100
-        self.sample_interval = 200
+        self.n_epochs = 200
+        self.sample_interval = 10
 
-        self.image_size = 256
+        self.image_size = 64
         self.channels_img = 3
 
         # self.stride = 1

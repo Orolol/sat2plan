@@ -5,11 +5,11 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
-from sat2plan.logic.models.samgan.samgan_building import ContentEncoder, StyleEncoder, Decoder, SAM_GAN, Discriminator
+from sat2plan.logic.models.samgan.samgan_building import SAM_GAN, Discriminator
 from sat2plan.logic.models.samgan.model_config import Model_Configuration
 from sat2plan.logic.models.samgan.global_configuration import Global_Configuration
 
-from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
+from sat2plan.logic.models.samgan.dataset_sam_gan import Satellite2Map_Data
 
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
@@ -86,28 +86,22 @@ class SAMGAN():
     def create_models(self):
 
         self.sam_gan = SAM_GAN()
-        #self.content_encoder = ContentEncoder()
-        #self.style_encoder = StyleEncoder()
-        #self.decoder = Decoder()
         self.netD = Discriminator(in_channels=3)
 
         self.adversarial_loss = AdversarialLoss()
         self.content_loss = ContentLoss()
         self.style_loss = StyleLoss()
 
-        """if self.load_model:
+        if self.load_model:
             model_and_optimizer = load_model()
-            self.netG.load_state_dict(model_and_optimizer['gen_state_dict'])
-            self.netD.load_state_dict(model_and_optimizer['disc_state_dict'])"""
+            self.sam_gan.load_state_dict(model_and_optimizer['gen_state_dict'])
+            self.netD.load_state_dict(model_and_optimizer['disc_state_dict'])
 
         # Check Cuda
         self.cuda = True if torch.cuda.is_available() else False
         if self.cuda:
             print("Cuda is available")
             self.sam_gan = self.sam_gan.cuda()
-            #self.content_encoder = self.content_encoder.cuda()
-            #self.style_encoder = self.style_encoder.cuda()
-            #self.decoder = self.decoder.cuda()
             self.netD = self.netD.cuda()
             self.adversarial_loss.cuda()
             self.content_loss.cuda()
@@ -116,21 +110,15 @@ class SAMGAN():
 
         self.OptimizerG = torch.optim.Adam(
             self.sam_gan.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
-        """self.OptimizerCE = torch.optim.Adam(
-            self.content_encoder.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
-        self.OptimizerSE = torch.optim.Adam(
-            self.style_encoder.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
-        self.OptimizerDE = torch.optim.Adam(
-            self.decoder.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))"""
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
 
-        """if self.load_model:
+        if self.load_model:
             model_and_optimizer = load_model()
             self.OptimizerG.load_state_dict(
                 model_and_optimizer['gen_opt_optimizer_state_dict'])
             self.OptimizerD.load_state_dict(
-                model_and_optimizer['gen_disc_optimizer_state_dict'])"""
+                model_and_optimizer['gen_disc_optimizer_state_dict'])
 
         self.BCE_Loss = nn.BCEWithLogitsLoss()
         self.L1_Loss = nn.L1Loss()
@@ -163,14 +151,14 @@ class SAMGAN():
                 y_fake = self.sam_gan(x, y)
                 D_real = self.netD(x, y)
                 D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
-                D_fake = self.netD(x, y_fake)
+                D_fake = self.netD(x, y_fake.detach())
                 D_fake_loss = self.BCE_Loss(D_fake, torch.zeros_like(D_fake))
                 D_loss = (D_real_loss + D_fake_loss)/2
 
                 # Backward and optimize
                 self.netD.zero_grad()
                 self.Dis_loss.append(D_loss.item())
-                D_loss.backward(retain_graph=True)
+                D_loss.backward()
                 self.OptimizerD.step()
 
                 ############## Train Generator ##############
@@ -178,8 +166,7 @@ class SAMGAN():
                 # Loss measures generator's ability to fool the discriminator
                 D_fake = self.netD(x, y_fake)
                 G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
-                L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
-                G_loss = G_fake_loss + L1
+                G_loss = G_fake_loss + self.content_loss(y_fake, y) + self.style_loss(y_fake,y)
                 self.Gen_loss.append(G_loss.item())
 
                 # Backward and optimize

@@ -15,13 +15,11 @@ from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
 from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, export_loss
-
-from sat2plan.logic.loss.loss import AdversarialLoss, ContentLoss, StyleLoss
 # Modèle Unet
 
 
 class Unet():
-    def __init__(self, data_bucket='data-10k'):
+    def __init__(self, data_bucket='data-1k'):
 
         # Import des paramètres globaux
         self.G_CFG = Global_Configuration()
@@ -88,9 +86,6 @@ class Unet():
 
         self.netD = Discriminator(in_channels=3)
         self.netG = Generator(in_channels=3)
-        self.adversarial_loss = AdversarialLoss()
-        self.content_loss = ContentLoss()
-        self.style_loss = StyleLoss()
 
         if self.load_model:
             model_and_optimizer = load_model()
@@ -103,10 +98,6 @@ class Unet():
             print("Cuda is available")
             self.netD = self.netD.cuda()
             self.netG = self.netG.cuda()
-            self.adversarial_loss.cuda()
-            self.content_loss.cuda()
-            self.style_loss.cuda()
-
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
@@ -128,7 +119,6 @@ class Unet():
         self.val_Gen_loss = []
         self.val_Gen_fake_loss = []
         self.val_Gen_L1_loss = []
-
 
         return
 
@@ -168,11 +158,10 @@ class Unet():
                 L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
                 G_loss = G_fake_loss + L1
                 self.Gen_loss.append(G_loss.item())
-                """G_loss = G_fake_loss + self.content_loss(y_fake, y) + self.style_loss(y_fake,y)"""
 
                 # Backward and optimize
                 self.OptimizerG.zero_grad()
-                G_loss.backward(retain_graph=True)
+                G_loss.backward()
                 self.OptimizerG.step()
 
                 print(
@@ -186,7 +175,7 @@ class Unet():
 
                 if idx == 0:
                     concatenated_images = torch.cat(
-                        (x[:], y_fake[:], y[:]), dim=2)
+                        (x[:-1], y_fake[:-1], y[:-1]), dim=2)
 
                     save_image(concatenated_images, "images/%d.png" %
                             batches_done, nrow=3, normalize=True)

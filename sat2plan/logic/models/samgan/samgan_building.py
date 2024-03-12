@@ -20,6 +20,7 @@ class SeBlock(nn.Module):
         b, c, _, _ = x.size()
         y = self.avg_pool(x).view(b, c)
         y = self.fc(y).view(b, c, 1, 1)
+
         return x * y
 
 class ResidualBlock(nn.Module):
@@ -35,6 +36,7 @@ class ResidualBlock(nn.Module):
         out = self.relu(self.norm(self.conv1(x)))
         out = self.norm(self.conv2(out))
         out += residual
+
         return out
 
 class AdaIN(nn.Module):
@@ -82,6 +84,7 @@ class ContentEncoder(nn.Module):
         out = self.se_block(out)
         out = self.downsampling(out)
         out = self.residual_blocks(out)
+
         return out
 
 class StyleEncoder(nn.Module):
@@ -105,6 +108,7 @@ class StyleEncoder(nn.Module):
         x = self.avg_pool(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
+
         return x
 
 class Decoder(nn.Module):
@@ -132,6 +136,7 @@ class Decoder(nn.Module):
         out = self.adain(out, style_features)  # Utiliser AdaIN
         out = self.upsampling(out)
         out = self.tanh(self.norm2(self.conv2(out)))
+
         return out
 
 class SAM_GAN(nn.Module):
@@ -146,11 +151,13 @@ class SAM_GAN(nn.Module):
             content_features = self.content_encoder(content_img)
             style_features = self.style_encoder(content_img)
             y_fake = self.decoder(content_features, style_features)
+
             return y_fake
 
         content_features = self.content_encoder(content_img)
         style_features = self.style_encoder(style_imgs)
         y_fake = self.decoder(content_features, style_features)
+
         return y_fake
 
 class Discriminator(nn.Module):
@@ -180,9 +187,7 @@ class Discriminator(nn.Module):
         self.model = nn.Sequential(*layers)
 
     def forward(self, x, y):
-        # X = Correct Satellite Image
-        # Y = Correct/Fake Image
-
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
+
         return self.model(x)

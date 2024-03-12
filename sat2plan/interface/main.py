@@ -38,6 +38,7 @@ def train_ucvgan():
     download_bucket_folder(data_bucket, val_size=0.05)
 
     print("Running unet training")
+    # train_model(data_bucket=data_bucket)
     ucvgan = UCVGan(data_bucket=data_bucket)
     ucvgan.train()
 

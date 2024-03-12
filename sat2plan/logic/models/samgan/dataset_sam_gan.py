@@ -6,19 +6,26 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision.utils import save_image
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+
+
 ############## Augmentations ###############
+
 both_transform = A.Compose(
-    [A.Resize(width=512, height=512),], additional_targets={"image0": "image"},
+    [
+        A.Resize(width=512, height=512),
+    ],
+    additional_targets={"image0": "image"},
 )
+
 transform_only_input = A.Compose(
     [
-        #A.HorizontalFlip(p=0.5),
         A.ColorJitter(p=0.2),
         A.Normalize(mean=[0.5, 0.5, 0.5], std=[
                     0.5, 0.5, 0.5], max_pixel_value=255.0,),
         ToTensorV2(),
     ]
 )
+
 transform_only_mask = A.Compose(
     [
         A.Normalize(mean=[0.5, 0.5, 0.5], std=[
@@ -58,11 +65,12 @@ class Satellite2Map_Data(Dataset):
             map_image = transform_only_mask(image=target_image)["image"]
 
             return (satellite_image, map_image)
+
         except:
             if torch.is_tensor(idx):
                 idx = idx.tolist()
             image_name = self.n_samples[idx]
-            # print(self.n_samples)
             image_path = os.path.join(self.root, image_name)
             print(image_path)
+
             pass

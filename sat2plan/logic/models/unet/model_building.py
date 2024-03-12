@@ -35,9 +35,6 @@ class Discriminator(nn.Module):
         self.model = nn.Sequential(*layers)
 
     def forward(self, x, y):
-        # X = Correct Satellite Image
-        # Y = Correct/Fake Image
-
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
         return self.model(x)
@@ -60,6 +57,7 @@ class Generator(nn.Module):
         ##############################################################################
         ################################## ENCODEUR ##################################
         ##############################################################################
+
         self.down1 = ConvBlock(features, features*2, down=True,
                                act="leaky", use_dropout=False)    # 64 X 64
         self.down2 = ConvBlock(features*2, features*4, down=True,
@@ -72,17 +70,21 @@ class Generator(nn.Module):
                                act="leaky", use_dropout=False)  # 4 X 4
         self.down6 = ConvBlock(features*8, features*8, down=True,
                                act="leaky", use_dropout=False)  # 2 X 2
+
         ##############################################################################
         ################################# BOTTLENECK #################################
         ##############################################################################
+
         self.bottleneck = nn.Sequential(
             nn.Conv2d(features*8, features*8, kernel_size, stride, padding,
                       padding_mode="reflect"),                      # 1 X 1
             nn.ReLU()
         )
+
         ##############################################################################
         ################################## DECODEUR ##################################
         ##############################################################################
+
         self.up1 = ConvBlock(features*8, features*8, down=False,
                              act="relu", use_dropout=True)
         self.up2 = ConvBlock(features*8*2, features*8, down=False,

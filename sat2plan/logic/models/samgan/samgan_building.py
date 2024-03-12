@@ -23,6 +23,7 @@ class SeBlock(nn.Module):
 
         return x * y
 
+
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ResidualBlock, self).__init__()
@@ -38,6 +39,7 @@ class ResidualBlock(nn.Module):
         out += residual
 
         return out
+
 
 class AdaIN(nn.Module):
     def __init__(self, in_channels, style_channels):
@@ -63,6 +65,7 @@ class AdaIN(nn.Module):
 
         return normalized_content
 
+
 class ContentEncoder(nn.Module):
     def __init__(self, in_channels, num_residual_blocks=7):
         super(ContentEncoder, self).__init__()
@@ -87,6 +90,7 @@ class ContentEncoder(nn.Module):
 
         return out
 
+
 class StyleEncoder(nn.Module):
     def __init__(self, in_channels):
         super(StyleEncoder, self).__init__()
@@ -110,6 +114,7 @@ class StyleEncoder(nn.Module):
         x = self.fc(x)
 
         return x
+
 
 class Decoder(nn.Module):
     def __init__(self, in_channels, out_channels, style_channels):
@@ -139,6 +144,7 @@ class Decoder(nn.Module):
 
         return out
 
+
 class SAM_GAN(nn.Module):
     def __init__(self, in_channels=3, out_channels=3, num_residual_blocks=7):
         super(SAM_GAN, self).__init__()
@@ -160,7 +166,8 @@ class SAM_GAN(nn.Module):
 
         return y_fake
 
-class Discriminator(nn.Module):
+
+"""class Discriminator(nn.Module):
     def __init__(self, kernel_size=4, stride=2, padding=2, in_channels=3, features=[64, 64, 64]):
         super().__init__()
         self.initial = nn.Sequential(
@@ -190,4 +197,23 @@ class Discriminator(nn.Module):
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
 
-        return self.model(x)
+        return self.model(x)"""
+
+
+class Discriminator(nn.Module):
+    def __init__(self, in_channels):
+        super(Discriminator, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels*2, 64, kernel_size=4, stride=2, padding=35)
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=35)
+        self.conv3 = nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=35)
+        self.conv4 = nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=35)
+        self.conv5 = nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=35)
+
+    def forward(self, real_img, generated_img):
+        x = torch.cat([real_img, generated_img], dim=1)  # Concatenate along the channel dimension
+        x = F.leaky_relu(self.conv1(x), 0.2)
+        x = F.leaky_relu(self.conv2(x), 0.2)
+        x = F.leaky_relu(self.conv3(x), 0.2)
+        x = F.leaky_relu(self.conv4(x), 0.2)
+        x = self.conv5(x)
+        return x

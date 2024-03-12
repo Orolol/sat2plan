@@ -2,7 +2,8 @@ import requests
 import os
 from PIL import Image
 import shutil
-from sat2plan.scripts.params import API_KEY
+# from sat2plan.scripts.params import API_KEY
+API_KEY = "AIzaSyANnnEOpfSU_BUn2p8NPbU48LJoG6MbOso"
 
 def coordonnees_gps(ville):
     """
@@ -86,4 +87,11 @@ def get_images(loc):
     os.chdir('adresse')
 
     # Sauvegarde du fichier de sortie
-    out.save(os.path.join(os.getcwd(), "adresse.jpg"))
+    repertoire = os.path.join(os.getcwd(), "adresse.jpg")
+    out.save(repertoire)
+    return repertoire
+
+
+loc = conversion_adresse_coordonnees_gps()
+repertoire = get_images(loc)
+print(repertoire)

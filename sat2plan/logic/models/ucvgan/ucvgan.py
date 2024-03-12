@@ -5,7 +5,9 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
-
+from torch.autograd import Variable
+from torch import autograd
+import pandas as pd
 from sat2plan.logic.models.ucvgan.global_config import Global_Configuration
 from sat2plan.logic.models.ucvgan.model_config import Model_Configuration
 
@@ -16,6 +18,8 @@ from sat2plan.logic.models.ucvgan.dataset import Satellite2Map_Data
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
 from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, export_loss
+
+from sat2plan.logic.loss.wgan import compute_gradient_penalty
 # Modèle Unet
 
 
@@ -50,7 +54,8 @@ class UCVGan():
         # Import des hyperparamètres du modèle
         self.M_CFG = Model_Configuration()
 
-        self.learning_rate = self.M_CFG.learning_rate
+        self.learning_rate_D = self.M_CFG.learning_rate_D
+        self.learning_rate_G = self.M_CFG.learning_rate_G
         self.beta1 = self.M_CFG.beta1
         self.beta2 = self.M_CFG.beta2
 
@@ -80,6 +85,44 @@ class UCVGan():
         print("Validation Data Loaded")
 
         return
+
+
+    def calculate_gradient_penalty(self, real_images, fake_images):
+        eta = torch.FloatTensor(self.batch_size, 1, 1, 1).uniform_(0, 1)
+        eta = eta.expand(self.batch_size, real_images.size(
+            1), real_images.size(2), real_images.size(3))
+        if self.cuda:
+            eta = eta.cuda()
+        else:
+            eta = eta
+
+        interpolated = eta * real_images + ((1 - eta) * fake_images)
+
+        if self.cuda:
+            interpolated = interpolated.cuda()
+        else:
+            interpolated = interpolated
+
+        # define it to calculate gradient
+        interpolated = Variable(interpolated, requires_grad=True)
+
+        # calculate probability of interpolated examples
+        prob_interpolated = self.netD(interpolated)
+
+        # calculate gradients of probabilities with respect to examples
+        gradients = autograd.grad(outputs=prob_interpolated, inputs=interpolated,
+                                grad_outputs=torch.ones(
+                                    prob_interpolated.size()).cuda(self.cuda_index) if self.cuda else torch.ones(
+                                    prob_interpolated.size()),
+                                create_graph=True, retain_graph=True)[0]
+
+        # flatten the gradients to it calculates norm batchwise
+        gradients = gradients.view(gradients.size(0), -1)
+
+        grad_penalty = ((gradients.norm(2, dim=1) - 1)
+                        ** 2).mean() * self.lambda_gp
+        return grad_penalty
+
 
     # Create models, optimizers ans losses
 
@@ -129,6 +172,7 @@ class UCVGan():
     def train(self):
         # Création du fichier params.json
         os.makedirs("save", exist_ok=True)
+        os.makedirs("save/loss", exist_ok=True)
         params_json = open("params.json", mode="w", encoding='UTF-8')
         pytorch_total_params_G = sum(
             p.numel() for p in self.netG.parameters() if p.requires_grad)
@@ -136,6 +180,8 @@ class UCVGan():
             p.numel() for p in self.netD.parameters() if p.requires_grad)
         print("Total params in Generator :", pytorch_total_params_G)
         print("Total params in Discriminator :", pytorch_total_params_D)
+        
+        loss_df = pd.DataFrame(columns=["epoch", "batch", "loss_g", "loss_d"])
 
         for epoch in range(self.starting_epoch, self.n_epochs):
             for idx, (x, y, to_save) in enumerate(self.train_dl):
@@ -158,7 +204,8 @@ class UCVGan():
                 # print("NETD1", x.shape, y_fake.shape)
                 D_fake = self.netD(x, y_fake.detach())
                 D_fake_loss = self.BCE_Loss(D_fake, torch.zeros_like(D_fake))
-                D_loss = (D_real_loss + D_fake_loss)/2
+                gradient_penalty = compute_gradient_penalty()
+                D_loss = D_fake_loss - D_real_loss + gradient_penalty
 
                 # Backward and optimize
                 self.netD.zero_grad()
@@ -172,14 +219,21 @@ class UCVGan():
                 # print("NETD", y_fake.shape, y.shape)
                 D_fake = self.netD(x, y_fake)
                 G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
-                L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
-                G_loss = G_fake_loss + L1
+                # L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
+                
+                G_loss = G_fake_loss 
                 self.Gen_loss.append(G_loss.item())
 
                 # Backward and optimize
                 self.OptimizerG.zero_grad()
                 G_loss.backward()
                 self.OptimizerG.step()
+                
+                self.OptimizerG.state[]
+                
+               
+                # Save the loss
+                loss_df = loss_df.append({"epoch": epoch, "batch": idx, "loss_g": G_loss.item(), "loss_d": D_loss.item()}, ignore_index=True)
 
                 if idx % 100 == 0:
                     print(
@@ -193,8 +247,18 @@ class UCVGan():
                                str(epoch) + "-" + str(idx), nrow=3, normalize=True)
 
                 # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
-
+            if epoch == 0:
+                # append loss to CSV
+                loss_df.to_csv("save/loss/loss.csv", mode="a", header=True)
+            
             if epoch != 0:
+                # append loss to CSV and be sure to not overwrite
+                loss_df.to_csv("save/loss/loss.csv", mode="a", header=False)
+                
+                if epoch % 10 == 0:
+                        for g in self.OptimizerG.param_groups:
+                            g['lr'] = g['lr'] / 2
+                            print("Learning rate of generator is now", g['lr'])
                 print("-- Test de validation --")
                 self.validation()
                 print(f"Epoch : {epoch+1}/{self.n_epochs} :")

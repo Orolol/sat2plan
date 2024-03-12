@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
-from torchsummary import summary
 
 from sat2plan.logic.models.ucvgan.global_config import Global_Configuration
 from sat2plan.logic.models.ucvgan.model_config import Model_Configuration
@@ -191,18 +190,9 @@ class UCVGan():
                         (x[:], y_fake[:], y[:]), dim=2)
 
                     save_image(concatenated_images, "images/%d.png" %
-                               str(epoch) + "-" + str(batches_done), nrow=3, normalize=True)
+                               str(epoch) + "-" + str(idx), nrow=3, normalize=True)
 
                 # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
-
-                batches_done = epoch * len(self.train_dl) + idx
-
-                if idx == 0:
-                    concatenated_images = torch.cat(
-                        (x[:], y_fake[:], y[:]), dim=2)
-
-                    save_image(concatenated_images, "images/%d.png" %
-                               epoch, nrow=3, normalize=True)
 
             if epoch != 0:
                 print("-- Test de validation --")
@@ -238,7 +228,7 @@ class UCVGan():
         sum_G_fake_loss = 0
         sum_G_L1_loss = 0
 
-        for idx, (x, y) in enumerate(self.val_dl):
+        for idx, (x, y, _) in enumerate(self.val_dl):
             ############## Discriminator ##############
 
             if self.cuda:

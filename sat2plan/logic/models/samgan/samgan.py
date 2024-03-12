@@ -129,7 +129,6 @@ class SAMGAN():
         self.val_Gen_fake_loss = []
         self.val_Gen_L1_loss = []
 
-
         return
 
     # Train & save models

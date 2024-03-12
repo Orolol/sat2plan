@@ -6,7 +6,10 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision.utils import save_image
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+
+
 ############## Augmentations ###############
+
 both_transform = A.Compose(
     [A.Resize(width=512, height=512),], additional_targets={"image0": "image"},
 )
@@ -65,4 +68,5 @@ class Satellite2Map_Data(Dataset):
             # print(self.n_samples)
             image_path = os.path.join(self.root, image_name)
             print(image_path)
+
             pass

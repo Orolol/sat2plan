@@ -1,9 +1,5 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 from torchvision.io import read_image
 from torchvision import transforms
-from torch import tensor
 import os
 
 #data_path = os.path.join('.', '.', '.', '.', 'data', 'data-1k')

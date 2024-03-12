@@ -44,7 +44,6 @@ class Satellite2Map_Data(Dataset):
             if torch.is_tensor(idx):
                 idx = idx.tolist()
             image_name = self.n_samples[idx]
-            # print(self.n_samples)
             image_path = os.path.join(self.root, image_name)
             image = np.asarray(Image.open(image_path).convert('RGB'))
             height, width, _ = image.shape
@@ -57,12 +56,7 @@ class Satellite2Map_Data(Dataset):
             target_image = augmentations["image0"]
             satellite_image = transform_only_input(image=input_image)["image"]
             map_image = transform_only_mask(image=target_image)["image"]
-            # PIL_image = Image.fromarray(numpy_image.astype('uint8'), 'RGB')
-            # satellite_image = Image.fromarray(satellite_image.astype('uint8'),'RGB')
-            # map_image = Image.fromarray(map_image.astype('uint8'),'RGB')
-            # if self.transform!=None:
-            #     satellite_image = self.transform(satellite_image)
-            #     map_image = self.transform(map_image)
+
             return (satellite_image, map_image)
         except:
             if torch.is_tensor(idx):
@@ -72,16 +66,3 @@ class Satellite2Map_Data(Dataset):
             image_path = os.path.join(self.root, image_name)
             print(image_path)
             pass
-
-
-"""
-if __name__=="__main__":
-    dataset = Satellite2Map_Data("../../../../sat2plan/data/data-1k")
-    loader = DataLoader(dataset, batch_size=5)
-    for x,y in loader:
-        print("X Shape :-",x.shape)
-        print("Y Shape :-",y.shape)
-        save_image(x,"satellite.png")
-        save_image(y,"map.png")
-        break
-"""

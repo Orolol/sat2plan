@@ -9,22 +9,14 @@ class Global_Configuration:
         self.train_dir = "./data/split/train"
         self.val_dir = "./data/split/val"
 
-        # self.learning_rate = 2e-4
-        # self.beta1 = 0.5
-        # self.beta2 = 0.999
-
         self.n_cpu = 6
 
         self.batch_size = 1
-        self.n_epochs = 100
-        self.sample_interval = 200
+        self.n_epochs = 200
+        self.sample_interval = 50
 
-        self.image_size = 256
+        self.image_size = 512
         self.channels_img = 3
-
-        # self.stride = 1
-        # self.padding = 1
-        # self.kernel_size = 3
 
         self.num_workers = 2
         self.l1_lambda = 100

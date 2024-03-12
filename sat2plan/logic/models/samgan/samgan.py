@@ -109,7 +109,7 @@ class SAMGAN():
 
 
         self.OptimizerG = torch.optim.Adam(
-            self.sam_gan.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+            self.sam_gan.parameters(), lr=0.02, betas=(self.beta1, self.beta2))
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
 

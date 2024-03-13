@@ -233,7 +233,7 @@ class Unet():
         sum_G_fake_loss = 0
         sum_G_L1_loss = 0
 
-        for idx, (x, y) in enumerate(self.val_dl):
+        for idx, (x, y, _) in enumerate(self.val_dl):
             ############## Discriminator ##############
 
             if self.cuda:

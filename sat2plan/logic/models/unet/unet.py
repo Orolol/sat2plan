@@ -208,7 +208,7 @@ class Unet():
                 G_fake_loss_mino = self.BCE_Loss(
                     D_fake_mino, torch.ones_like(D_fake_mino))
                 self.OptimizerG_second_head.zero_grad()
-                G_loss_mino = G_fake_loss_mino + L1_2
+                G_loss_mino = G_fake_loss_mino
                 G_loss_mino.backward()
                 self.OptimizerG_second_head.step()
 

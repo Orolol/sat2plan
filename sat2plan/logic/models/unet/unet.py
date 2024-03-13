@@ -190,10 +190,12 @@ class Unet():
                 if idx == 0:
                     concatenated_images = torch.cat(
                         (x[:], y_fake[:], y[:]), dim=2)
+                    concatenated_images_mino = torch.cat(
+                        (x[:], y_fake[:], y_minautor[:], y[:]), dim=2)
 
                     save_image(concatenated_images, "images/%d.png" %
                                batches_done, nrow=3, normalize=True)
-                    save_image(concatenated_images, "images_minautor/%d.png" %
+                    save_image(concatenated_images_mino, "images_minautor/%d.png" %
                                batches_done, nrow=3, normalize=True)
 
             if epoch != 0 and (epoch+1) % 5 == 0:

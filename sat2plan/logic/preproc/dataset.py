@@ -11,12 +11,9 @@ from albumentations.pytorch import ToTensorV2
 ############## Augmentations ###############
 
 both_transform = A.Compose(
-    [
-        A.Resize(width=512, height=512),
-    ],
-    additional_targets={"image0": "image"},
-)
+    [A.Resize(width=512, height=512), A.HorizontalFlip(p=0.5),], additional_targets={"image0": "image"},
 
+)
 transform_only_input = A.Compose(
     [
         A.ColorJitter(p=0.2),
@@ -25,7 +22,6 @@ transform_only_input = A.Compose(
         ToTensorV2(),
     ]
 )
-
 transform_only_mask = A.Compose(
     [
         A.Normalize(mean=[0.5, 0.5, 0.5], std=[
@@ -33,6 +29,8 @@ transform_only_mask = A.Compose(
         ToTensorV2(),
     ]
 )
+
+img_to_save = ['000363_Paris_48.88108_2.33803.png']
 
 
 class Satellite2Map_Data(Dataset):
@@ -51,6 +49,10 @@ class Satellite2Map_Data(Dataset):
             if torch.is_tensor(idx):
                 idx = idx.tolist()
             image_name = self.n_samples[idx]
+            to_save = False
+            if image_name in img_to_save:
+                to_save = True
+            # print(self.n_samples)
             image_path = os.path.join(self.root, image_name)
             image = np.asarray(Image.open(image_path).convert('RGB'))
             height, width, _ = image.shape
@@ -63,14 +65,18 @@ class Satellite2Map_Data(Dataset):
             target_image = augmentations["image0"]
             satellite_image = transform_only_input(image=input_image)["image"]
             map_image = transform_only_mask(image=target_image)["image"]
-
-            return (satellite_image, map_image)
-
+            # PIL_image = Image.fromarray(numpy_image.astype('uint8'), 'RGB')
+            # satellite_image = Image.fromarray(satellite_image.astype('uint8'),'RGB')
+            # map_image = Image.fromarray(map_image.astype('uint8'),'RGB')
+            # if self.transform!=None:
+            #     satellite_image = self.transform(satellite_image)
+            #     map_image = self.transform(map_image)
+            return (satellite_image, map_image, to_save)
         except:
             if torch.is_tensor(idx):
                 idx = idx.tolist()
             image_name = self.n_samples[idx]
+            # print(self.n_samples)
             image_path = os.path.join(self.root, image_name)
             print(image_path)
-
             pass

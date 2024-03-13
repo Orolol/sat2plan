@@ -3,6 +3,8 @@ import os
 from PIL import Image
 import shutil
 from sat2plan.scripts.params import API_KEY
+from sat2plan.interface.main import pred
+
 
 def coordonnees_gps(ville):
     """
@@ -32,10 +34,10 @@ def conversion_adresse_coordonnees_gps(adresse):
     """
 
     # Remplacement des espaces sous le format Google
-    adresse = adresse.replace(' ','%20')
+    adresse = adresse.replace(' ', '%20')
 
     # Adresse de la requête
-    url = f'https://maps.googleapis.com/maps/api/geocode/json?address={adresse}&key={API_KEY}'
+    url = f'https://maps.googleapis.com/maps/api/geocode/json?address={adresse}&zoom=17&size=512x512&key={API_KEY}'
 
     # Récupération du dictionnaire sous format json
     response = requests.get(url).json()
@@ -53,6 +55,7 @@ def conversion_adresse_coordonnees_gps(adresse):
     else:
         return None
 
+
 def get_images(loc):
     """
     Cette fonction récupère l'image satellite pour des coordonnées GPS données
@@ -60,13 +63,13 @@ def get_images(loc):
     """
 
     # Supression du répertoire "adresse" ancien
-    shutil.rmtree('data/adresse',ignore_errors=True)
+    shutil.rmtree('data/adresse', ignore_errors=True)
 
     # Création du répertoire adresse qui contiendra l'image satellite de l'adresse donnée
     path = os.path.join(os.getcwd(), "data/adresse/")
     os.mkdir(path, 0o777)
 
-    format = ['roadmap','satellite']
+    format = ['roadmap', 'satellite']
 
     repertoire = {}
 
@@ -75,8 +78,8 @@ def get_images(loc):
         out = Image.new('RGB', (512, 512))
 
         # Adresse de la requête
-        url = "https://maps.googleapis.com/maps/api/staticmap?center={},{}&zoom=17&size=1280x1280&maptype={}&style=feature:all%7Celement:labels%7Cvisibility:off&key={}".format(
-                loc[0], loc[1], carte, API_KEY)
+        url = "https://maps.googleapis.com/maps/api/staticmap?center={},{}&zoom=17&size=640x640&maptype={}&style=feature:all%7Celement:labels%7Cvisibility:off&key={}".format(
+            loc[0], loc[1], carte, API_KEY)
 
         # Lecture de l'image
         im = Image.open(requests.get(url, stream=True).raw)
@@ -90,6 +93,8 @@ def get_images(loc):
         # Sauvegarde du fichier de sortie
         repertoire[carte] = os.path.join(path, f"adresse_{carte}.jpg")
         out.save(repertoire[carte])
+
+    pred()
 
     return repertoire
 

@@ -65,13 +65,13 @@ def train_sam_gan():
     sam_gan.train()
 
 
-def pred(image_satellite_path="pred_images/000015_San_Diego_32.66616_-117.09823.png") -> np.ndarray:
+def pred() -> np.ndarray:
     pred_model = None
     if pred_model is None:
         pred_model = load_pred_model()
 
     image_satellite = np.asarray(Image.open(
-        image_satellite_path).convert('RGB'))
+        "data/adresse/adresse_satellite.jpg").convert('RGB'))
 
     # convert image to tensor
     image_satellite = image_satellite / 255
@@ -84,7 +84,7 @@ def pred(image_satellite_path="pred_images/000015_San_Diego_32.66616_-117.09823.
     netG.load_state_dict(pred_model)
     y_pred = netG(image_satellite)
     save_image(
-        y_pred, f"pred_images/test.png", normalize=True)
+        y_pred, f"data/adresse/adresse_generee.png", normalize=True)
     return y_pred
 
 

@@ -183,12 +183,17 @@ class Unet():
 
                 y_minautor = self.netG_second_head(y_fake.detach())
 
-                D_real_mino = self.netD(y.detach(), y_minautor)
+                D_real_mino = self.netD_second_head(y.detach(), y_minautor)
+
                 D_real_loss_mino = self.BCE_Loss(
                     D_real_mino, torch.ones_like(D_real_mino))
-                D_fake_mino = self.netD(y_fake.detach(), y_minautor.detach())
+
+                D_fake_mino = self.netD_second_head(
+                    y_fake.detach(), y_minautor.detach())
+
                 D_fake_loss_mino = self.BCE_Loss(
                     D_fake, torch.zeros_like(D_fake_mino))
+
                 D_loss_mino = (D_real_loss_mino + D_fake_loss_mino)/2
 
                 # Backward and optimize

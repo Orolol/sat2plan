@@ -221,12 +221,12 @@ class SAMGAN():
 
             if self.save_model_bool:
                 if epoch < 11 or (self.val_Gen_loss[-1] + self.val_Dis_loss[-1] < sum([x+y for x in self.val_Gen_loss[:-1] for y in self.val_Dis_loss[:-1]])/len(self.val_Gen_loss)):
-                    save_model({"gen": self.netG, "disc": self.netD}, {
+                    save_model({"gen": self.sam_gan, "disc": self.netD}, {
                         "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
                     save_results(params=self.M_CFG, metrics=dict(
                         Gen_loss=G_loss, Dis_loss=D_loss))
 
-        save_model({"gen": self.netG, "disc": self.netD}, {
+        save_model({"gen": self.sam_gan, "disc": self.netD}, {
             "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
         save_results(params=self.M_CFG, metrics=dict(
             Gen_loss=G_loss, Dis_loss=D_loss))

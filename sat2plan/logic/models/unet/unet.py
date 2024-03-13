@@ -213,6 +213,11 @@ class Unet():
                         "[Epoch %d/%d] [Batch %d/%d] MINO [D loss: %f] [G loss: %f]"
                         % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss_mino.item(), G_loss_mino.item())
                     )
+                    if idx == 0:
+                        concatenated_images_mino = torch.cat(
+                            (x[:], y_fake[:], y_minautor[:], y[:]), dim=2)
+                        save_image(
+                            concatenated_images_mino, f"images_minautor/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
 
                 print(
                     "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
@@ -222,13 +227,8 @@ class Unet():
                 if idx == 0:
                     concatenated_images = torch.cat(
                         (x[:], y_fake[:], y[:]), dim=2)
-                    concatenated_images_mino = torch.cat(
-                        (x[:], y_fake[:], y_minautor[:], y[:]), dim=2)
-
                     save_image(
                         concatenated_images, f"images/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
-                    save_image(
-                        concatenated_images_mino, f"images_minautor/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
 
             if epoch != 0 and (epoch+1) % 5 == 0:
                 print("-- Test de validation --")

@@ -117,7 +117,7 @@ class UCVGan():
         # flatten the gradients to it calculates norm batchwise
         gradients = gradients.view(gradients.size(0), -1)
 
-        grad_penalty = ((gradients.norm(2, dim=1) - 1)
+        grad_penalty = ((gradients.norm(2, dim=1))
                         ** 2).mean() * self.lambda_gp
         return grad_penalty
 
@@ -187,6 +187,9 @@ class UCVGan():
                     x = x .cuda()
                     y = y.cuda()
 
+                self.OptimizerD.zero_grad()
+                self.OptimizerG.zero_grad()
+
                 ############## Train Discriminator ##############
 
                 # Measure discriminator's ability to classify real from generated samples
@@ -204,14 +207,12 @@ class UCVGan():
                 D_fake_loss = self.BCE_Loss(
                     D_fake, torch.zeros_like(D_fake)).mean()
 
-                gradient_penalty = self.calculate_gradient_penalty(
-                    y, y_fake, x)
+                # gradient_penalty = self.calculate_gradient_penalty(
+                #     y, y_fake, x)
                 # gradient_penalty.backward()
-                D_loss = D_fake_loss - D_real_loss + gradient_penalty
+                D_loss = (D_fake_loss + D_real_loss) / 2
 
                 # Backward and optimize
-                self.OptimizerD.zero_grad()
-                self.netD.zero_grad()
                 self.Dis_loss.append(D_loss.item())
                 D_loss.backward()
                 self.OptimizerD.step()
@@ -229,8 +230,6 @@ class UCVGan():
                 self.Gen_loss.append(G_loss.item())
 
                 # Backward and optimize
-                self.OptimizerG.zero_grad()
-                self.netG.zero_grad()
                 G_loss.backward()
                 self.OptimizerG.step()
 

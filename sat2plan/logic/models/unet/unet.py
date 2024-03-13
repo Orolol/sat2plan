@@ -198,7 +198,7 @@ class Unet():
                 self.OptimizerD_second_head.step()
 
                 L1_2 = self.L1_Loss_mino(
-                    y_minautor, y_fake.detach()) * self.l1_lambda
+                    y_minautor, y.detach()) * self.l1_lambda
                 # Backward and optimize
                 G_loss = G_fake_loss
                 D_fake_mino = self.netD_second_head(

@@ -192,7 +192,7 @@ class Unet():
                     y_fake.detach(), y_minautor.detach())
 
                 D_fake_loss_mino = self.BCE_Loss(
-                    D_fake, torch.zeros_like(D_fake_mino))
+                    D_fake_mino, torch.zeros_like(D_fake_mino))
 
                 D_loss_mino = (D_real_loss_mino + D_fake_loss_mino)/2
 

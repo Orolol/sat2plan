@@ -151,7 +151,7 @@ class SAMGAN():
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.sam_gan(x, y)
                 print(to_save[0])
-                if to_save:
+                if to_save[0]:
                     save_image(y_fake, f"save/y_gen_{epoch}_{idx}.png")
                     save_image(x, f"save/input_{epoch}_{idx}.png")
                     save_image(y, f"save/label_{epoch}_{idx}.png")

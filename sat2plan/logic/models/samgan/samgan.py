@@ -6,13 +6,12 @@ from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
 from sat2plan.logic.models.samgan.samgan_building import SAM_GAN, Discriminator
-from sat2plan.logic.models.samgan.model_config import Model_Configuration
-from sat2plan.logic.models.samgan.global_configuration import Global_Configuration
 
-from sat2plan.logic.models.samgan.dataset_sam_gan import Satellite2Map_Data
+from sat2plan.logic.configuration.config import Model_Configuration, Global_Configuration
 
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
+from sat2plan.logic.preproc.dataset import Satellite2Map_Data
 from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, export_loss
 
 from sat2plan.logic.loss.loss import AdversarialLoss, ContentLoss, StyleLoss

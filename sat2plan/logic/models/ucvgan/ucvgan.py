@@ -195,10 +195,10 @@ class UCVGan():
 
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.netG(x)
-                if to_save:
+                """if to_save:
                     save_image(y_fake, f"save/y_gen_{epoch}_{idx}.png")
                     save_image(x, f"save/input_{epoch}_{idx}.png")
-                    save_image(y, f"save/label_{epoch}_{idx}.png")
+                    save_image(y, f"save/label_{epoch}_{idx}.png")"""
                 # print("NETD0", x.shape, y.shape)
                 D_real = self.netD(x, y)
                 D_real_loss = self.BCE_Loss(

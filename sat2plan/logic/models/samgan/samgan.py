@@ -150,10 +150,10 @@ class SAMGAN():
 
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.sam_gan(x, y)
-                if to_save:
+                """if to_save[0]:
                     save_image(y_fake, f"save/y_gen_{epoch}_{idx}.png")
                     save_image(x, f"save/input_{epoch}_{idx}.png")
-                    save_image(y, f"save/label_{epoch}_{idx}.png")
+                    save_image(y, f"save/label_{epoch}_{idx}.png")"""
                 D_real = self.netD(x, y)
                 D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
                 D_fake = self.netD(x, y_fake)
@@ -221,12 +221,12 @@ class SAMGAN():
 
             if self.save_model_bool:
                 if epoch < 11 or (self.val_Gen_loss[-1] + self.val_Dis_loss[-1] < sum([x+y for x in self.val_Gen_loss[:-1] for y in self.val_Dis_loss[:-1]])/len(self.val_Gen_loss)):
-                    save_model({"gen": self.netG, "disc": self.netD}, {
+                    save_model({"gen": self.sam_gan, "disc": self.netD}, {
                         "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
                     save_results(params=self.M_CFG, metrics=dict(
                         Gen_loss=G_loss, Dis_loss=D_loss))
 
-        save_model({"gen": self.netG, "disc": self.netD}, {
+        save_model({"gen": self.sam_gan, "disc": self.netD}, {
             "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
         save_results(params=self.M_CFG, metrics=dict(
             Gen_loss=G_loss, Dis_loss=D_loss))
@@ -243,7 +243,7 @@ class SAMGAN():
         sum_G_fake_loss = 0
         sum_G_L1_loss = 0
 
-        for idx, (x, y) in enumerate(self.val_dl):
+        for idx, (x, y, _) in enumerate(self.val_dl):
             ############## Discriminator ##############
 
             if self.cuda:

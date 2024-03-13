@@ -15,7 +15,7 @@ from sat2plan.logic.models.samgan.samgan import SAMGAN
 # @mlflow_run
 def train_unet():
 
-    data_bucket = 'data-10k'
+    data_bucket = 'data-1k'
     # export_params_txt()
 
     print(Fore.YELLOW + "Training unet" + Style.RESET_ALL)

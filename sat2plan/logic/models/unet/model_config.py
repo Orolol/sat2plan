@@ -5,7 +5,7 @@ class Model_Configuration:
 
     def __init__(self):
 
-        self.learning_rate = 2e-4
+        self.learning_rate = 1e-4
         self.beta1 = 0.5
         self.beta2 = 0.999
 

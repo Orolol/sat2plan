@@ -126,7 +126,7 @@ class Unet():
         params_json = open("params.json", mode="w", encoding='UTF-8')
 
         for epoch in range(self.n_epochs):
-            for idx, (x, y) in enumerate(self.train_dl):
+            for idx, (x, y, to_save) in enumerate(self.train_dl):
 
                 if self.cuda:
                     x = x .cuda()
@@ -136,6 +136,10 @@ class Unet():
 
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.netG(x)
+                if to_save:
+                    save_image(y_fake, f"save/y_gen_{epoch}_{idx}.png")
+                    save_image(x, f"save/input_{epoch}_{idx}.png")
+                    save_image(y, f"save/label_{epoch}_{idx}.png")
                 D_real = self.netD(x, y)
                 D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
                 D_fake = self.netD(x, y_fake.detach())

@@ -88,6 +88,7 @@ class Unet():
         self.netD = Discriminator(in_channels=3)
         self.netG = Generator(in_channels=3)
         self.netG_second_head = Generator(in_channels=3)
+        self.netD_second_head = Discriminator(in_channels=3)
 
         if self.load_model:
             model_and_optimizer = load_model()
@@ -101,13 +102,16 @@ class Unet():
             self.netD = self.netD.cuda()
             self.netG = self.netG.cuda()
             self.netG_second_head = self.netG_second_head.cuda()
+            self.netD_second_head = self.netD_second_head.cuda()
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
             self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
         self.OptimizerG_second_head = torch.optim.Adam(
-            self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+            self.netG_second_head.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+        self.OptimizerD_second_head = torch.optim.Adam(
+            self.netD_second_head.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
 
         if self.load_model:
             model_and_optimizer = load_model()
@@ -175,16 +179,32 @@ class Unet():
                     % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
                 )
 
-                # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
-
                 batches_done = epoch * len(self.train_dl) + idx
 
                 y_minautor = self.netG_second_head(y_fake.detach())
+
+                D_real_mino = self.netD(y, y_minautor)
+                D_real_loss_mino = self.BCE_Loss(
+                    D_real_mino, torch.ones_like(D_real_mino))
+                D_fake_mino = self.netD(y_fake, y_minautor.detach())
+                D_fake_loss_mino = self.BCE_Loss(
+                    D_fake, torch.zeros_like(D_fake_mino))
+                D_loss_mino = (D_real_loss_mino + D_fake_loss_mino)/2
+
+                # Backward and optimize
+                self.netD_second_head.zero_grad()
+                D_loss_mino.backward()
+                self.OptimizerD.step()
+
                 L1_2 = self.L1_Loss_mino(
                     y_minautor, y_fake.detach()) * self.l1_lambda
                 # Backward and optimize
+                G_loss = G_fake_loss + L1
+                G_fake_loss_mino = self.BCE_Loss(
+                    D_fake_mino, torch.ones_like(D_fake_mino))
                 self.OptimizerG_second_head.zero_grad()
-                L1_2.backward()
+                G_loss_mino = G_fake_loss_mino + L1_2
+                G_loss_mino.backward()
                 self.OptimizerG_second_head.step()
 
                 if idx == 0:

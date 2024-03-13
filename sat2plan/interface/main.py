@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import torch
+from torchvision.utils import save_image
 
 from pathlib import Path
 from colorama import Fore, Style
@@ -9,7 +11,7 @@ from PIL import Image
 
 from sat2plan.logic.preproc.data import download_bucket_folder
 from sat2plan.logic.preproc.sauvegarde_params import export_params_txt
-from sat2plan.logic.models.ucvgan.ucvgan import UCVGan
+from sat2plan.logic.models.ucvgan.ucvgan import UCVGan, Generator
 from sat2plan.logic.models.unet.unet import Unet
 from sat2plan.logic.models.samgan.samgan import SAMGAN
 from sat2plan.scripts.flow import load_pred_model
@@ -63,7 +65,7 @@ def train_sam_gan():
     sam_gan.train()
 
 
-def pred(image_satellite_path="images_pred/000004_San_Jose_37.23808_-121.91478.png") -> np.ndarray:
+def pred(image_satellite_path="pred_images/000015_San_Diego_32.66616_-117.09823.png") -> np.ndarray:
     pred_model = None
     if pred_model is None:
         pred_model = load_pred_model()
@@ -71,9 +73,18 @@ def pred(image_satellite_path="images_pred/000004_San_Jose_37.23808_-121.91478.p
     image_satellite = np.asarray(Image.open(
         image_satellite_path).convert('RGB'))
 
-    y_pred = pred_model(image_satellite)
-    plt.imshow(y_pred)
-    plt.show()
+    # convert image to tensor
+    image_satellite = image_satellite / 255
+    image_satellite = np.transpose(image_satellite, (2, 0, 1))
+    image_satellite = np.expand_dims(image_satellite, axis=0)
+    image_satellite = torch.tensor(image_satellite, dtype=torch.float32)
+
+    netG = Generator(in_channels=3)
+
+    netG.load_state_dict(pred_model)
+    y_pred = netG(image_satellite)
+    save_image(
+        y_pred, f"pred_images/test.png", normalize=True)
     return y_pred
 
 

@@ -175,40 +175,40 @@ class Unet():
                 self.OptimizerG.step()
 
                 batches_done = epoch * len(self.train_dl) + idx
+                if epoch > 10:
+                    y_minautor = self.netG_second_head(y_fake.detach())
 
-                y_minautor = self.netG_second_head(y_fake.detach())
+                    D_real_mino = self.netD_second_head(
+                        y.detach(), y.detach())
 
-                D_real_mino = self.netD_second_head(
-                    y.detach(), y.detach())
+                    D_real_loss_mino = self.BCE_Loss(
+                        D_real_mino, torch.ones_like(D_real_mino))
 
-                D_real_loss_mino = self.BCE_Loss(
-                    D_real_mino, torch.ones_like(D_real_mino))
+                    D_fake_mino = self.netD_second_head(
+                        y_minautor.detach(), y_minautor.detach())
 
-                D_fake_mino = self.netD_second_head(
-                    y_minautor.detach(), y_minautor.detach())
+                    D_fake_loss_mino = self.BCE_Loss(
+                        D_fake_mino, torch.zeros_like(D_fake_mino))
 
-                D_fake_loss_mino = self.BCE_Loss(
-                    D_fake_mino, torch.zeros_like(D_fake_mino))
+                    D_loss_mino = (D_real_loss_mino + D_fake_loss_mino)/2
 
-                D_loss_mino = (D_real_loss_mino + D_fake_loss_mino)/2
+                    # Backward and optimize
+                    self.netD_second_head.zero_grad()
+                    D_loss_mino.backward()
+                    self.OptimizerD_second_head.step()
 
-                # Backward and optimize
-                self.netD_second_head.zero_grad()
-                D_loss_mino.backward()
-                self.OptimizerD_second_head.step()
-
-                # L1_2 = self.L1_Loss_mino(
-                #     y_minautor, y.detach()) * self.l1_lambda
-                # Backward and optimize
-                G_loss = G_fake_loss
-                D_fake_mino = self.netD_second_head(
-                    y_fake.detach(), y_minautor)
-                G_fake_loss_mino = self.BCE_Loss(
-                    D_fake_mino, torch.ones_like(D_fake_mino))
-                self.OptimizerG_second_head.zero_grad()
-                G_loss_mino = G_fake_loss_mino
-                G_loss_mino.backward()
-                self.OptimizerG_second_head.step()
+                    # L1_2 = self.L1_Loss_mino(
+                    #     y_minautor, y.detach()) * self.l1_lambda
+                    # Backward and optimize
+                    G_loss = G_fake_loss
+                    D_fake_mino = self.netD_second_head(
+                        y_fake.detach(), y_minautor)
+                    G_fake_loss_mino = self.BCE_Loss(
+                        D_fake_mino, torch.ones_like(D_fake_mino))
+                    self.OptimizerG_second_head.zero_grad()
+                    G_loss_mino = G_fake_loss_mino
+                    G_loss_mino.backward()
+                    self.OptimizerG_second_head.step()
 
                 print(
                     "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
@@ -225,10 +225,10 @@ class Unet():
                     concatenated_images_mino = torch.cat(
                         (x[:], y_fake[:], y_minautor[:], y[:]), dim=2)
 
-                    save_image(concatenated_images, "images/%d.png" %
-                               batches_done, nrow=3, normalize=True)
-                    save_image(concatenated_images_mino, "images_minautor/%d.png" %
-                               batches_done, nrow=3, normalize=True)
+                    save_image(
+                        concatenated_images, f"images/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
+                    save_image(
+                        concatenated_images_mino, f"images_minautor/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
 
             if epoch != 0 and (epoch+1) % 5 == 0:
                 print("-- Test de validation --")

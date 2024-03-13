@@ -91,9 +91,10 @@ def get_images(loc):
         out.paste(im, (0, 0))
 
         # Sauvegarde du fichier de sortie
-        repertoire[carte] = os.path.join(path, f"adresse_{carte}.jpg")
+        repertoire[carte] = os.path.join(path, f"adresse_{carte}.png")
         out.save(repertoire[carte])
-
+    pred()
+    repertoire['generee'] = os.path.join(path, f"adresse_generee.png")
     pred()
 
     return repertoire

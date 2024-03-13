@@ -109,9 +109,9 @@ class Unet():
         self.OptimizerG = torch.optim.Adam(
             self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
         self.OptimizerG_second_head = torch.optim.Adam(
-            self.netG_second_head.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+            self.netG_second_head.parameters(), lr=self.learning_rate * 10, betas=(self.beta1, self.beta2))
         self.OptimizerD_second_head = torch.optim.Adam(
-            self.netD_second_head.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+            self.netD_second_head.parameters(), lr=self.learning_rate * 10, betas=(self.beta1, self.beta2))
 
         if self.load_model:
             model_and_optimizer = load_model()
@@ -179,13 +179,13 @@ class Unet():
                 y_minautor = self.netG_second_head(y_fake.detach())
 
                 D_real_mino = self.netD_second_head(
-                    x, y.detach())
+                    y.detach(), y.detach())
 
                 D_real_loss_mino = self.BCE_Loss(
                     D_real_mino, torch.ones_like(D_real_mino))
 
                 D_fake_mino = self.netD_second_head(
-                    x, y_minautor.detach())
+                    y_minautor.detach(), y_minautor.detach())
 
                 D_fake_loss_mino = self.BCE_Loss(
                     D_fake_mino, torch.zeros_like(D_fake_mino))

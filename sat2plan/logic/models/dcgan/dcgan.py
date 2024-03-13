@@ -5,12 +5,12 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
-from sat2plan.logic.models.unet.global_config import Global_Configuration
-from sat2plan.logic.models.unet.model_config import Model_Configuration
+from sat2plan.logic.models.dcgan.global_config import Global_Configuration
+from sat2plan.logic.models.dcgan.model_config import Model_Configuration
 
-from sat2plan.logic.models.unet.model_building import Generator, Discriminator
+from sat2plan.logic.models.dcgan.model_building import Generator, Discriminator
 
-from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
+from sat2plan.logic.models.dcgan.dataset import Satellite2Map_Data
 
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
@@ -84,8 +84,8 @@ class Dcgan():
 
     def create_models(self):
 
-        self.netD = Discriminator(in_channels=3)
-        self.netG = Generator(in_channels=3)
+        self.netD = Discriminator()
+        self.netG = Generator()
 
         if self.load_model:
             model_and_optimizer = load_model()

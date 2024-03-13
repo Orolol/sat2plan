@@ -8,11 +8,8 @@ from dateutil.parser import parse
 from sat2plan.logic.preproc.data import download_bucket_folder
 from sat2plan.logic.preproc.sauvegarde_params import export_params_txt
 from sat2plan.logic.models.unet.unet import Unet
-<<<<<<< HEAD
-from sat2plan.logic.models.dcgan.dcgan import Dcgan
-=======
 from sat2plan.logic.models.samgan.samgan import SAMGAN
->>>>>>> 605a57e1026dadba72c2909bea7ed61a5f8db64f
+from sat2plan.logic.models.dcgan.dcgan import Dcgan
 
 
 # @mlflow_run
@@ -32,7 +29,7 @@ def train_unet():
 # @mlflow_run
 def train_dcgan():
 
-    data_bucket = 'data-10k'
+    data_bucket = 'data-1k'
     # export_params_txt()
 
     print(Fore.YELLOW + "Training dcgan" + Style.RESET_ALL)

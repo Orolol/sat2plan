@@ -10,6 +10,8 @@ from colorama import Fore, Style
 from google.cloud import storage
 
 from sat2plan.scripts.params import MODEL_TARGET, BUCKET_NAME, MLFLOW_TRACKING_URI, MLFLOW_EXPERIMENT, MLFLOW_MODEL_NAME
+from sat2plan.logic.configuration.config import Global_Configuration
+
 import mlflow
 from mlflow.tracking import MlflowClient
 
@@ -184,7 +186,7 @@ def save_checkpoint(model, optimizer, filename="my_checkpoint.pth.tar"):
 
 def load_checkpoint(checkpoint_file, model, optimizer, lr):
     print("=> Loading checkpoint")
-    checkpoint = torch.load(checkpoint_file, map_location=DEVICE)
+    checkpoint = torch.load(checkpoint_file, map_location=Global_Configuration().device)
     model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
 

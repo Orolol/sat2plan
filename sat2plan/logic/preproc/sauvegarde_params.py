@@ -1,8 +1,7 @@
-import os
 import json
 import getpass
 
-from sat2plan.logic.models.unet.global_config import Global_Configuration
+from sat2plan.logic.configuration.config import Global_Configuration
 
 def export_params_txt():
     """

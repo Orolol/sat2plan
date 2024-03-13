@@ -11,3 +11,5 @@ google-cloud-storage
 mlflow
 python-dotenv
 albumentations
+streamlit
+streamlit_image_comparison

@@ -100,6 +100,7 @@ class Unet():
             print("Cuda is available")
             self.netD = self.netD.cuda()
             self.netG = self.netG.cuda()
+            self.netG_second_head = self.netG_second_head.cuda()
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))

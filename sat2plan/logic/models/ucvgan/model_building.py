@@ -9,7 +9,7 @@ from sat2plan.logic.models.blocks.blocks import CNN_Block, ConvBlock, PixelwiseV
 
 
 class Discriminator(nn.Module):
-    def __init__(self, kernel_size=4, stride=2, padding=1, in_channels=3, features=[64, 128, 256, 512]):
+    def __init__(self, kernel_size=4, stride=2, padding=1, in_channels=3, features=[64, 128, 256, 512, 1024]):
         super().__init__()
         self.initial = nn.Sequential(
             nn.Conv2d(

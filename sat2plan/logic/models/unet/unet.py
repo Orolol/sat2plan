@@ -180,7 +180,8 @@ class Unet():
                 batches_done = epoch * len(self.train_dl) + idx
 
                 y_minautor = self.netG_second_head(y_fake)
-                L1_2 = self.L1_Loss_mino(y_minautor, y_fake) * self.l1_lambda
+                L1_2 = self.L1_Loss_mino(
+                    y_minautor, y_fake.detach()) * self.l1_lambda
                 # Backward and optimize
                 self.OptimizerG_second_head.zero_grad()
                 L1_2.backward()

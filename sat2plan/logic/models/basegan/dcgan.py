@@ -30,21 +30,18 @@ class Generator(nn.Module):
     def __init__(self, img_size=256, latent_dim=100, channels=3):
         super(Generator, self).__init__()
 
-        # self.init_size = img_size // 4
         self.init_size = img_size
 
         self.l1 = nn.Sequential(
             nn.Linear(latent_dim, 128 * self.init_size ** 2))
 
         self.conv_blocks = nn.Sequential(
-            # nn.Upsample(scale_factor=2),
             nn.Conv2d(channels, 128, 3, stride=1, padding=1),
             nn.BatchNorm2d(128, 0.8),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(128, 128, 3, stride=1, padding=1),
             nn.BatchNorm2d(128, 0.8),
             nn.LeakyReLU(0.2, inplace=True),
-            # nn.Upsample(scale_factor=2),
             nn.Conv2d(128, 64, 3, stride=1, padding=1),
             nn.BatchNorm2d(64, 0.8),
             nn.LeakyReLU(0.2, inplace=True),
@@ -53,9 +50,6 @@ class Generator(nn.Module):
         )
 
     def forward(self, z):
-        # print("Z", z.shape)
-        # out = self.l1(z)
-        # out = z.view(z.shape[0], 128, self.init_size, self.init_size)
         print("OUT", z.shape)
         img = self.conv_blocks(z)
         print("IMG", img.shape)
@@ -105,10 +99,7 @@ def run_dcgan():
     lr = 0.0002
     b1 = 0.5
     b2 = 0.999
-    n_cpu = 6
-    latent_dim = 100
     img_size = 64
-    channels = 3
     sample_interval = 10
     from_scratch = True
 
@@ -149,7 +140,6 @@ def run_dcgan():
     # Configure data loader
     dataloader = torch.utils.data.DataLoader(
         datasets.ImageFolder("sat2plan/data", transform=transforms.Compose([
-            # transforms.Resize(256),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])),
@@ -169,6 +159,7 @@ def run_dcgan():
     # ----------
     #  Training
     # ----------
+
     print('Start training')
     for epoch in range(n_epochs):
         for i, (imgs, _) in enumerate(dataloader):
@@ -177,11 +168,6 @@ def run_dcgan():
                                 size=(img_size, img_size))
             plan = F.interpolate(imgs[:, :, :, 512:],
                                  size=(img_size, img_size))
-
-            # plt.imshow(plan[0].permute(1, 2, 0))
-            # plt.show()
-            # plt.imshow(sat[0].permute(1, 2, 0))
-            # plt.show()
 
             # Adversarial ground truths
             valid = Variable(Tensor(imgs.shape[0], 1).fill_(
@@ -206,6 +192,7 @@ def run_dcgan():
             g_loss = adversarial_loss(discriminator(gen_imgs), valid)
             g_loss.backward()
             optimizer_G.step()
+
             # ---------------------
             #  Train Discriminator
             # ---------------------
@@ -224,10 +211,6 @@ def run_dcgan():
                 "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
                 % (epoch, n_epochs, i, len(dataloader), d_loss.item(), g_loss.item())
             )
-
-            # Sauvegarder l'image
-            # save_image(concatenated_images,
-            #            f'gen_images/concatenated_image{epoch}-{i} .jpg')
 
             batches_done = epoch * len(dataloader) + i
             if batches_done % sample_interval == 0:

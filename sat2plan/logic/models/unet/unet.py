@@ -1,19 +1,18 @@
 import os
+import pandas as pd
 
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
-from sat2plan.logic.models.unet.global_config import Global_Configuration
-from sat2plan.logic.models.unet.model_config import Model_Configuration
+from sat2plan.logic.configuration.config import Model_Configuration, Global_Configuration
 
 from sat2plan.logic.models.unet.model_building import Generator, Discriminator
 
-from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
-
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
+from sat2plan.logic.preproc.dataset import Satellite2Map_Data
 from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, export_loss
 # Modèle Unet
 
@@ -127,8 +126,10 @@ class Unet():
         # Création du fichier params.json
         params_json = open("params.json", mode="w", encoding='UTF-8')
 
+        loss = []
+
         for epoch in range(self.n_epochs):
-            for idx, (x, y) in enumerate(self.train_dl):
+            for idx, (x, y, to_save) in enumerate(self.train_dl):
 
                 if self.cuda:
                     x = x .cuda()
@@ -138,6 +139,10 @@ class Unet():
 
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.netG(x)
+                """if to_save:
+                    save_image(y_fake, f"save/y_gen_{epoch}_{idx}.png")
+                    save_image(x, f"save/input_{epoch}_{idx}.png")
+                    save_image(y, f"save/label_{epoch}_{idx}.png")"""
                 D_real = self.netD(x, y)
                 D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
                 D_fake = self.netD(x, y_fake.detach())
@@ -164,23 +169,37 @@ class Unet():
                 G_loss.backward()
                 self.OptimizerG.step()
 
-                print(
-                    "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                    % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
-                )
+                # Save the loss
+                loss.append({"epoch": epoch, "batch": idx,
+                            "loss_g": G_loss.item(), "loss_d": D_loss.item()})
+
+                if idx % 100 == 0:
+                    print(
+                        "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+                        % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
+                    )
+                    concatenated_images = torch.cat(
+                        (x[:], y_fake[:], y[:]), dim=2)
+
+                    save_image(
+                        concatenated_images, f"images/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
 
                 # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
+            loss_df = pd.DataFrame(
+                loss, columns=["epoch", "batch", "loss_g", "loss_d"])
+            if epoch == 0:
 
-                batches_done = epoch * len(self.train_dl) + idx
+                # append loss to CSV
+                loss_df.to_csv("save/loss/loss.csv", mode="a", header=True)
 
-                if idx == 0:
-                    concatenated_images = torch.cat(
-                        (x[:-1], y_fake[:-1], y[:-1]), dim=2)
+            if epoch != 0:
+                # append loss to CSV and be sure to not overwrite
+                loss_df.to_csv("save/loss/loss.csv", mode="a", header=False)
 
-                    save_image(concatenated_images, "images/%d.png" %
-                            batches_done, nrow=3, normalize=True)
-
-            if epoch != 0 and (epoch+1) % 5 == 0:
+                if epoch % 10 == 0:
+                    for g in self.OptimizerG.param_groups:
+                        g['lr'] = g['lr'] / 2
+                        print("Learning rate of generator is now", g['lr'])
                 print("-- Test de validation --")
                 self.validation()
                 print(f"Epoch : {epoch+1}/{self.n_epochs} :")
@@ -190,13 +209,12 @@ class Unet():
                     f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
                 print("------------------------")
 
-            if self.save_model_bool and (epoch+1) % 5 == 0:
+            if self.save_model_bool:
                 if epoch < 11 or (self.val_Gen_loss[-1] + self.val_Dis_loss[-1] < sum([x+y for x in self.val_Gen_loss[:-1] for y in self.val_Dis_loss[:-1]])/len(self.val_Gen_loss)):
                     save_model({"gen": self.netG, "disc": self.netD}, {
                         "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
                     save_results(params=self.M_CFG, metrics=dict(
                         Gen_loss=G_loss, Dis_loss=D_loss))
-
 
         save_model({"gen": self.netG, "disc": self.netD}, {
             "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
@@ -215,7 +233,7 @@ class Unet():
         sum_G_fake_loss = 0
         sum_G_L1_loss = 0
 
-        for idx, (x, y) in enumerate(self.val_dl):
+        for idx, (x, y, _) in enumerate(self.val_dl):
             ############## Discriminator ##############
 
             if self.cuda:

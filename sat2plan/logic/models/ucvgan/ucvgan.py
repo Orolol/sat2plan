@@ -5,18 +5,19 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
+
+
+from sat2plan.logic.configuration.config import Model_Configuration, Global_Configuration
+
 from torch.autograd import Variable
 from torch import autograd
 import pandas as pd
-from sat2plan.logic.models.ucvgan.global_config import Global_Configuration
-from sat2plan.logic.models.ucvgan.model_config import Model_Configuration
 
 from sat2plan.logic.models.ucvgan.model_building import Generator, Discriminator
 
-from sat2plan.logic.models.ucvgan.dataset import Satellite2Map_Data
-
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
+from sat2plan.logic.preproc.dataset import Satellite2Map_Data
 from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, export_loss
 
 # Modèle Unet
@@ -194,10 +195,10 @@ class UCVGan():
 
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.netG(x)
-                if to_save:
+                """if to_save:
                     save_image(y_fake, f"save/y_gen_{epoch}_{idx}.png")
                     save_image(x, f"save/input_{epoch}_{idx}.png")
-                    save_image(y, f"save/label_{epoch}_{idx}.png")
+                    save_image(y, f"save/label_{epoch}_{idx}.png")"""
                 # print("NETD0", x.shape, y.shape)
                 D_real = self.netD(x, y)
                 D_real_loss = self.BCE_Loss(

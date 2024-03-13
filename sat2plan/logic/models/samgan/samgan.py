@@ -1,4 +1,5 @@
 import os
+import pandas as pd
 
 import torch
 import torch.nn as nn
@@ -6,13 +7,12 @@ from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
 from sat2plan.logic.models.samgan.samgan_building import SAM_GAN, Discriminator
-from sat2plan.logic.models.samgan.model_config import Model_Configuration
-from sat2plan.logic.models.samgan.global_configuration import Global_Configuration
 
-from sat2plan.logic.models.samgan.dataset_sam_gan import Satellite2Map_Data
+from sat2plan.logic.configuration.config import Model_Configuration, Global_Configuration
 
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
+from sat2plan.logic.preproc.dataset import Satellite2Map_Data
 from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, export_loss
 
 from sat2plan.logic.loss.loss import AdversarialLoss, ContentLoss, StyleLoss
@@ -109,7 +109,7 @@ class SAMGAN():
 
 
         self.OptimizerG = torch.optim.Adam(
-            self.sam_gan.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+            self.sam_gan.parameters(), lr=0.02, betas=(self.beta1, self.beta2))
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
 
@@ -129,7 +129,6 @@ class SAMGAN():
         self.val_Gen_fake_loss = []
         self.val_Gen_L1_loss = []
 
-
         return
 
     # Train & save models
@@ -137,9 +136,11 @@ class SAMGAN():
         # Création du fichier params.json
         params_json = open("params.json", mode="w", encoding='UTF-8')
 
+        loss = []
+
         for epoch in range(self.n_epochs):
             self.sam_gan.train()
-            for idx, (x, y) in enumerate(self.train_dl):
+            for idx, (x, y, to_save) in enumerate(self.train_dl):
 
                 if self.cuda:
                     x = x .cuda()
@@ -149,16 +150,20 @@ class SAMGAN():
 
                 # Measure discriminator's ability to classify real from generated samples
                 y_fake = self.sam_gan(x, y)
+                """if to_save[0]:
+                    save_image(y_fake, f"save/y_gen_{epoch}_{idx}.png")
+                    save_image(x, f"save/input_{epoch}_{idx}.png")
+                    save_image(y, f"save/label_{epoch}_{idx}.png")"""
                 D_real = self.netD(x, y)
                 D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
-                D_fake = self.netD(x, y_fake.detach())
+                D_fake = self.netD(x, y_fake)
                 D_fake_loss = self.BCE_Loss(D_fake, torch.zeros_like(D_fake))
                 D_loss = (D_real_loss + D_fake_loss)/2
 
                 # Backward and optimize
                 self.netD.zero_grad()
                 self.Dis_loss.append(D_loss.item())
-                D_loss.backward()
+                D_loss.backward(retain_graph=True)
                 self.OptimizerD.step()
 
                 ############## Train Generator ##############
@@ -174,23 +179,37 @@ class SAMGAN():
                 G_loss.backward(retain_graph=True)
                 self.OptimizerG.step()
 
-                print(
-                    "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                    % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
-                )
+                # Save the loss
+                loss.append({"epoch": epoch, "batch": idx,
+                            "loss_g": G_loss.item(), "loss_d": D_loss.item()})
 
-                # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
-
-                batches_done = epoch * len(self.train_dl) + idx
-
-                if idx == 25:
+                if idx % 100 == 0:
+                    print(
+                        "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+                        % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
+                    )
                     concatenated_images = torch.cat(
                         (x[:], y_fake[:], y[:]), dim=2)
 
-                    save_image(concatenated_images, "images/_%d.png" %
-                            batches_done, nrow=3, normalize=True)
+                    save_image(
+                        concatenated_images, f"images/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
 
-            if epoch != 0 and (epoch+1) % 5 == 0:
+                # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
+            loss_df = pd.DataFrame(
+                loss, columns=["epoch", "batch", "loss_g", "loss_d"])
+            if epoch == 0:
+
+                # append loss to CSV
+                loss_df.to_csv("save/loss/loss.csv", mode="a", header=True)
+
+            if epoch != 0:
+                # append loss to CSV and be sure to not overwrite
+                loss_df.to_csv("save/loss/loss.csv", mode="a", header=False)
+
+                if epoch % 10 == 0:
+                    for g in self.OptimizerG.param_groups:
+                        g['lr'] = g['lr'] / 2
+                        print("Learning rate of generator is now", g['lr'])
                 print("-- Test de validation --")
                 self.validation()
                 print(f"Epoch : {epoch+1}/{self.n_epochs} :")
@@ -200,13 +219,12 @@ class SAMGAN():
                     f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
                 print("------------------------")
 
-            if self.save_model_bool and (epoch+1) % 5 == 0:
+            if self.save_model_bool:
                 if epoch < 11 or (self.val_Gen_loss[-1] + self.val_Dis_loss[-1] < sum([x+y for x in self.val_Gen_loss[:-1] for y in self.val_Dis_loss[:-1]])/len(self.val_Gen_loss)):
                     save_model({"gen": self.sam_gan, "disc": self.netD}, {
                         "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
                     save_results(params=self.M_CFG, metrics=dict(
                         Gen_loss=G_loss, Dis_loss=D_loss))
-
 
         save_model({"gen": self.sam_gan, "disc": self.netD}, {
             "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
@@ -225,7 +243,7 @@ class SAMGAN():
         sum_G_fake_loss = 0
         sum_G_L1_loss = 0
 
-        for idx, (x, y) in enumerate(self.val_dl):
+        for idx, (x, y, _) in enumerate(self.val_dl):
             ############## Discriminator ##############
 
             if self.cuda:

@@ -5,15 +5,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
-from sat2plan.logic.models.unet.global_config import Global_Configuration
-from sat2plan.logic.models.unet.model_config import Model_Configuration
+from sat2plan.logic.configuration.config import Model_Configuration, Global_Configuration
 
 from sat2plan.logic.models.unet.model_building import Generator, Discriminator
 
-from sat2plan.logic.models.unet.dataset import Satellite2Map_Data
-
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
+from sat2plan.logic.preproc.dataset import Satellite2Map_Data
 from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, export_loss
 # Modèle Unet
 

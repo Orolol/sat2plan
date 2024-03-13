@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from sat2plan.logic.models.blocks.blocks import CNN_Block, ConvBlock, PixelwiseViT
+from sat2plan.logic.blocks.blocks import CNN_Block, ConvBlock, PixelwiseViT
 
 
 ####################################################################################################################

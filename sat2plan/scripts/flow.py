@@ -10,7 +10,7 @@ from colorama import Fore, Style
 from google.cloud import storage
 
 from sat2plan.scripts.params import MODEL_TARGET, BUCKET_NAME, MLFLOW_TRACKING_URI, MLFLOW_EXPERIMENT, MLFLOW_MODEL_NAME
-from sat2plan.logic.models.unet.global_config import Global_Configuration
+from sat2plan.logic.configuration.config import Global_Configuration
 
 import mlflow
 from mlflow.tracking import MlflowClient

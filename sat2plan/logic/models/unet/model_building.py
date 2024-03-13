@@ -65,13 +65,13 @@ class Generator(nn.Module):
         self.down2 = ConvBlock(features*2, features*4, down=True,
                                act="leaky", use_dropout=False)  # 32 X 32
         self.down3 = ConvBlock(features*4, features*8, down=True,
-                               act="leaky", use_dropout=False)  # 16 X 16
+                               act="leaky", use_dropout=True)  # 16 X 16
         self.down4 = ConvBlock(features*8, features*8, down=True,
-                               act="leaky", use_dropout=False)  # 8 X 8
+                               act="leaky", use_dropout=True)  # 8 X 8
         self.down5 = ConvBlock(features*8, features*8, down=True,
-                               act="leaky", use_dropout=False)  # 4 X 4
+                               act="leaky", use_dropout=True)  # 4 X 4
         self.down6 = ConvBlock(features*8, features*8, down=True,
-                               act="leaky", use_dropout=False)  # 2 X 2
+                               act="leaky", use_dropout=True)  # 2 X 2
         ##############################################################################
         ################################# BOTTLENECK #################################
         ##############################################################################
@@ -90,7 +90,7 @@ class Generator(nn.Module):
         self.up3 = ConvBlock(features*8*2, features*8, down=False,
                              act="relu", use_dropout=True)
         self.up4 = ConvBlock(features*8*2, features*8, down=False,
-                             act="relu", use_dropout=False)
+                             act="relu", use_dropout=True)
         self.up5 = ConvBlock(features*8*2, features*4, down=False,
                              act="relu", use_dropout=False)
         self.up6 = ConvBlock(features*4*2, features*2, down=False,

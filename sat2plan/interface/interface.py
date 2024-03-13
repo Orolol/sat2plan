@@ -1,10 +1,8 @@
 import streamlit as st
 import time
 import os
-from pathlib import Path
-from PIL import Image
 from streamlit_image_comparison import image_comparison
-# from sat2plan.api.api import conversion_adresse_coordonnees_gps, get_images
+from sat2plan.api.api import conversion_adresse_coordonnees_gps, get_images
 
 def barre_defilement(texte,temps):
     """
@@ -31,13 +29,17 @@ def comparaison_image(satellite,cartographie):
     La variable "satellite" est le chemin d'accès à l'image satellite
     La variable "cartographie" est le chemin d'accès à la cartographie générée
     """
+    # Barre de défilement de la cartographie GAN
+    barre_defilement("Traitement image satellite. Merci de patientier",0.01)
+
     # Fonction
-    st.write("# Comparaison de l'image satellite et de la cartographie issue de l'IA")
+    # st.write("# Cartographie GAN")
     image_comparison(img1=satellite,
                     label1="Image satellite",
                     img2=cartographie,
                     label2='Cartographie',
                     starting_position=50)
+
 
 
 def image_cote_a_cote(satellite,cartographie):
@@ -75,92 +77,130 @@ def coordonnee_GPS(lat,lon):
     Cette fonction récupère la latitude et la longitude pour récupérer l'image satellite
     et fait appel au réseau de neurones pour récupérer la cartographie produite.
     """
-    loc = (lat,lon)
-    # Récupération de l'image satellite
-    # satellite = get_images(loc)
-    satellite = '/home/louishenri/code/TsaoTsao1/08-Projet/sat2plan/data/adresse/adresse.jpg'
 
-    # Image satellite récupérée
-    barre_defilement("Récupération image satellite sur Google Maps. Merci de patientier",0.001)
-    st.write("# Image satellite récupérée sur Google Maps")
-    st.image(satellite)
+    if (float(lat) >= -90 and float(lat) <= 90) and (float(lon) >= -180 and float(lon) <= 180 ):
+        loc = (lat,lon)
+        # Récupération de l'image satellite
+        satellite = get_images(loc)['satellite']
 
-    # Traitement par le réseau de neurones
-    ###
-    ### Appel fonction dédié au traitement cartographique
-    ###
+        # Image satellite récupérée
+        barre_defilement("Récupération image satellite sur Google Maps. Merci de patientier",0.001)
+        # st.write("# Image satellite")
+        st.image(satellite)
 
-    # Récupération des arborescences
-    cartographie = '/home/louishenri/code/TsaoTsao1/08-Projet/sat2plan/data/adresse/adresse.jpg'
-    barre_defilement("Traitement image satellite. Merci de patientier",0.001)
+        # Traitement par le réseau de neurones
+        ###
+        ### Appel fonction dédié au traitement cartographique
+        ###
+        ###
 
-    return satellite, cartographie
+        # Récupération de l'arborescence pour la cartographie
+        # cartographie =
+        cartographie = get_images(loc)['roadmap']
+
+        return satellite, cartographie
+    else:
+        st.error("Vos coordonnées sont absurdes, revoyez votre géographie", icon="🚨")
+        st.error("La latitude est comprise entre -90 et +90", icon="🌐")
+        st.error("La longitude est comprise entre -180 et +180", icon="🌐")
+
+        return None, None
 
 
-def adresse():
+def adresse(adresse):
     """
     Cette fonction fait appel à une autre fonction qui convertit une adresse postale ou le nom d'un lieu en coordonnées GPS
     Elle retourne la latitude et la longitude
     """
 
     # Appel de la fonction
-    loc = conversion_adresse_coordonnees_gps()
+    loc = conversion_adresse_coordonnees_gps(adresse)
 
-    return loc[0], loc[1]
 
-# Configuration de l'onglet du navigateur
-titre = "SAT2PLAN"
-icone = os.path.join(os.getcwd(),"icone","satellite_lewagon.png")
-onglet(titre,icone)
+    try:
+        return loc[0], loc[1]
+    except:
+        st.error("Veuillez vérifier les paramètres d'entrées (adresse, nom de lieu, orthographe ...)", icon="🚨")
+        return None
 
-col1, col2 = st.columns(2)
 
-# Logo site internet
-with col1:
+def main():
+    """
+    Fonction principale de l'interface
+    """
+    # Configuration de l'onglet du navigateur
+    titre = "SAT2PLAN"
+    icone = os.path.join(os.getcwd(),"sat2plan/interface/icone","satellite_lewagon.png")
+    icone_inverse = os.path.join(os.getcwd(),"sat2plan/interface/icone","satellite_lewagon_inverse.png")
+    onglet(titre,icone)
 
-    st.image(icone,width=200)
+    col1, col2, col3 = st.columns(3)
 
-# Titre
-with col2:
+    # Logo site internet
+    with col1:
 
-    st.title("""
-            SAT2PLAN
+        st.image(icone,width=200)
+
+    # Titre
+    with col2:
+
+        st.title("""
+                SAT2PLAN
+                """)
+
+    with col3:
+
+        st.image(icone_inverse,width=200)
+
+    # Descriptif
+    st.write("""
+            Démonstration d'un réseaux antagonistes génératifs (GAN) qui transforme les images satellites en cartographie
             """)
 
+    # Paramètres d'entrée pour le relevé de l'image satellite
+    choix = st.radio("type d'entrée",["Coordonnées GPS","Adresse / Nom d'un lieu"])
 
-st.write("""
-        Cette page internet est une démonstration d'un réseau de neurones qui transforme les images satellites en cartographie
-         """)
+    if choix == "Coordonnées GPS":
+        # Entrée utilisateur
+        lat = st.text_input("Latitude")
+        lon = st.text_input("Longitude")
 
-# Paramètres d'entrée pour le relevé de l'image satellite
-choix = st.radio("type d'entrée",['coordonnées GPS','adresse'])
+        if lat and lon:
+            # Création des onglets
+            tab1, tab2 = st.tabs(['Import Google Maps','Cartographie GAN'])
 
-if choix == "coordonnées GPS":
+            with tab1:
+                # Récupération des arborescences
+                satellite , cartographie = coordonnee_GPS(lat,lon)
 
-    # Entrée utilisateur
-    lat = st.text_input("Latitude")
-    lon = st.text_input("Longitude")
+            with tab2:
+                # Illustration comparative
+                if satellite == None or cartographie == None:
+                    st.error("GAN en attente de cartographie satellitaire", icon="🧠")
+                else:
+                    comparaison_image(satellite,cartographie)
+    else:
+        # Entrée utilisateur
+        entree_adresse = st.text_input("Adresse / Nom d'un lieu")
 
-    if lat and lon:
+        if entree_adresse:
+            # Création des onglets
+            tab1, tab2 = st.tabs(['Import Google Maps','Cartographie GAN'])
 
-        # Récupération des arborescences
-        satellite , cartographie = coordonnee_GPS(lat,lon)
+            with tab1:
+                # Conversion adresse en coordonnées GPS
+                loc = adresse(entree_adresse)
 
-        # Illustration comparative
-        comparaison_image(satellite,cartographie)
+                # Récupération des arborescences
+                if loc != None:
+                    satellite , cartographie = coordonnee_GPS(loc[0],loc[1])
 
-else:
+            with tab2:
+                # Illustration comparative
+                if loc != None:
+                    comparaison_image(satellite,cartographie)
+                else:
+                    st.error("GAN en attente de cartographie satellitaire", icon="🧠")
 
-    # Entrée utilisateur
-    adresse = st.text_input("Adresse")
-
-    if adresse:
-        # Conversion adresse en coordonnées GPS
-        # loc = adresse()
-        loc = (0,0)
-
-        # Récupération des arborescences
-        satellite , cartographie = coordonnee_GPS(loc[0],loc[1])
-
-        # Illustration comparative
-        comparaison_image(satellite,cartographie)
+if __name__ == '__main__':
+    main()

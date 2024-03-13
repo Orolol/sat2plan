@@ -89,6 +89,24 @@ def save_model(models: Dict[str, torch.nn.Module] = None, optimizers: Dict[str, 
     return None
 
 
+def load_pred_model() -> torch.nn.Module:
+    local_model_directory = os.path.join("pred_models")
+    local_model_paths = glob.glob(f"{local_model_directory}/*")
+
+    if not local_model_paths:
+        return None
+
+    most_recent_model_path_on_disk = sorted(local_model_paths)[-1]
+
+    print(Fore.BLUE + f"\nLoad latest model from disk..." + Style.RESET_ALL)
+    print(f"Most recent model path: {most_recent_model_path_on_disk}")
+    model = torch.load(most_recent_model_path_on_disk)
+
+    print("✅ Model loaded from local disk")
+
+    return model['gen_state_dict']
+
+
 def load_model(stage="Production") -> torch.nn.Module:
     if MODEL_TARGET == "local":
         print(Fore.BLUE + f"\nLoad latest model from local registry..." + Style.RESET_ALL)

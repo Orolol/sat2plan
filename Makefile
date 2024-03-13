@@ -13,5 +13,9 @@ run_train_ucvgan:
 run_train_sam_gan:
 	python3 -c 'from sat2plan.interface.main import train_sam_gan; train_sam_gan()'
 
+run_pred:
+	python3 -c 'from sat2plan.interface.main import pred; pred()'
+
 run_api:
 	python3 -c 'from sat2plan.api.api import test_api; test_api()'
+

@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
-from sat2plan.logic.models.blocks.blocks import CNN_Block
+from sat2plan.logic.blocks.blocks import CNN_Block
 
 
 class SeBlock(nn.Module):

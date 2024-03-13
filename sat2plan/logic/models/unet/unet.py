@@ -66,6 +66,7 @@ class Unet():
     def dataloading(self):
 
         os.makedirs("images", exist_ok=True)
+        os.makedirs("images_minautor", exist_ok=True)
         os.makedirs("data", exist_ok=True)
 
         self.train_dataset = Satellite2Map_Data(root=self.train_dir)
@@ -86,6 +87,7 @@ class Unet():
 
         self.netD = Discriminator(in_channels=3)
         self.netG = Generator(in_channels=3)
+        self.netG_second_head = Generator(in_channels=3)
 
         if self.load_model:
             model_and_optimizer = load_model()
@@ -102,6 +104,8 @@ class Unet():
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
+            self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
+        self.OptimizerG_second_head = torch.optim.Adam(
             self.netG.parameters(), lr=self.learning_rate, betas=(self.beta1, self.beta2))
 
         if self.load_model:
@@ -173,12 +177,21 @@ class Unet():
 
                 batches_done = epoch * len(self.train_dl) + idx
 
+                y_minautor = self.netG_second_head(y_fake)
+                L1_2 = self.L1_Loss(y_minautor, y_fake) * self.l1_lambda
+                # Backward and optimize
+                self.OptimizerG_second_head.zero_grad()
+                L1_2.backward()
+                self.OptimizerG_second_head.step()
+
                 if idx == 0:
                     concatenated_images = torch.cat(
-                        (x[:-1], y_fake[:-1], y[:-1]), dim=2)
+                        (x[:], y_fake[:], y[:]), dim=2)
 
                     save_image(concatenated_images, "images/%d.png" %
-                            batches_done, nrow=3, normalize=True)
+                               batches_done, nrow=3, normalize=True)
+                    save_image(concatenated_images, "images_minautor/%d.png" %
+                               batches_done, nrow=3, normalize=True)
 
             if epoch != 0 and (epoch+1) % 5 == 0:
                 print("-- Test de validation --")
@@ -196,7 +209,6 @@ class Unet():
                         "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")
                     save_results(params=self.M_CFG, metrics=dict(
                         Gen_loss=G_loss, Dis_loss=D_loss))
-
 
         save_model({"gen": self.netG, "disc": self.netD}, {
             "gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD}, suffix=f"-{epoch}-G")

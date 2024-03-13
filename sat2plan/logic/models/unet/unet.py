@@ -201,10 +201,10 @@ class Unet():
                 D_loss_mino.backward()
                 self.OptimizerD_second_head.step()
 
-                L1_2 = self.L1_Loss_mino(
-                    y_minautor, y_fake.detach()) * self.l1_lambda
+                # L1_2 = self.L1_Loss_mino(
+                #     y_minautor, y_fake.detach()) * self.l1_lambda
                 # Backward and optimize
-                G_loss = G_fake_loss + L1
+                G_loss = G_fake_loss
                 G_fake_loss_mino = self.BCE_Loss(
                     D_fake_mino, torch.ones_like(D_fake_mino))
                 self.OptimizerG_second_head.zero_grad()

@@ -174,11 +174,6 @@ class Unet():
                 G_loss.backward()
                 self.OptimizerG.step()
 
-                print(
-                    "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                    % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
-                )
-
                 batches_done = epoch * len(self.train_dl) + idx
 
                 y_minautor = self.netG_second_head(y_fake.detach())
@@ -213,6 +208,15 @@ class Unet():
                 G_loss_mino = G_fake_loss_mino
                 G_loss_mino.backward()
                 self.OptimizerG_second_head.step()
+
+                print(
+                    "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+                    % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
+                )
+                print(
+                    "[Epoch %d/%d] [Batch %d/%d] MINO [D loss: %f] [G loss: %f]"
+                    % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss_mino.item(), G_loss_mino.item())
+                )
 
                 if idx == 0:
                     concatenated_images = torch.cat(

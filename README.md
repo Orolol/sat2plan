@@ -11,7 +11,7 @@ Le projet **SAT2PLAN** vise à récupérer une image satellite à partir de Goog
 
 *The **SAT2PLAN** project aims to retrieve a satellite image from Google Maps for a given address or GPS coordinates, then reconstruct maps using a generative antagonistic neural network (GAN).*
 
-## Context
+## Contexte / Context
 
 Le projet **SAT2PLAN** est une initiative collective dans le cadre de la formation **Data Science & AI** proposée par [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course). Il s'inscrit dans le domaine de la vision par ordinateur et de l'intelligence artificielle, avec pour objectif de créer un système capable de reconstruire des cartes en 2D à partir d'images satellites récupérées sur Google Maps.
 
@@ -23,7 +23,15 @@ The **SAT2PLAN** project is a group initiative as part of the **Data Science & A
 ![alt text](https://github.com/Orolol/sat2plan/blob/main/schema/schema-1.jpg?raw=true)
 
 
-## Features
+## Caractéristiques / Features
+
+- **Collecte d'images :** Environ 100 000 paires d'images ont été collectées à partir de l'API Google Maps pour alimenter le projet. Ces images sont essentielles pour l'entraînement et l'évaluation du modèle de réseau neuronal antagoniste génératif (GAN).
+
+- **Données géographiques :** Les images collectées couvrent une variété de villes américaines et européennes, avec une vue satellite et une carte d'environ 32 villes. Les données sont réparties de manière à couvrir une zone d'environ 1000 km² autour de chaque ville, offrant ainsi une diversité géographique significative pour le développement du modèle.
+
+- **Nettoyage des données :** Avant d'être utilisées dans le cadre du projet, les données ont été nettoyées. Ce processus comprend la suppression des doublons et des plans non pertinents. Ce nettoyage garantit que seules des données pertinentes et de qualité sont utilisées dans le projet, améliorant ainsi l'efficacité et la précision du modèle GAN.
+
+-----------------------------------------------------------------------------
 
 - **Image collection :** Around 100,000 pairs of images have been collected from the Google Maps API to feed the project. These images are essential for training and evaluating the generative adversarial neural network (GAN) model.
 

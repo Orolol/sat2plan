@@ -24,16 +24,16 @@ The sat2plan project is a group initiative as part of the **Data Science & AI** 
 ## Generative adversarial networks
 
 
-![alt text](https://github.com/Orolol/sat2plan/blob/main/schema/schema_2.jpg?raw=true)
+![alt text](https://github.com/Orolol/sat2plan/blob/main/schema/schema-2.jpg?raw=true)
 
+GANs were invented by Ian Goodfellow in 2014 and first described in the paper [Generative Adversarial Nets](https://proceedings.neurips.cc/paper_files/paper/2014/file/5ca3e9b122f61f8f06494c97b1afccf3-Paper.pdf).
 
+They consist of two distinct models:
+- **The generator :** Its aim is to generate 'false' images that resemble the training images.
+- **The discriminator :** Its aim is to examine an image and determine whether it is a genuine training image or a false image from the generator.
 
-
-
-
-
-
-
+### How gan works
+During training, the generator constantly tries to outwit the discriminator by producing increasingly false images, while the discriminator strives to become a better detective and correctly classify true and false images. The equilibrium of this game is reached when the generator generates perfect fakes that appear to come directly from the training data, and the discriminator must always guess, with 50% confidence, whether the generator's output is real or fake <sup>[1](https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html)</sup>.
 
 
 

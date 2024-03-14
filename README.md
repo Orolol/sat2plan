@@ -48,6 +48,7 @@ Les GAN ont été développés par Ian Goodfellow en 2014 et décrits pour la pr
 
 Ils se composent de deux modèles distincts :
 - **Le générateur :** Son but est de générer de "fausses" images qui ressemblent aux images d'apprentissage.
+
 - **Le discriminateur :** Son but est d'examiner une image et de déterminer s'il s'agit d'une véritable image d'apprentissage ou d'une fausse image provenant du générateur.
 
 -----------------------------------------------------------------------------

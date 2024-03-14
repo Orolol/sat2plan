@@ -77,7 +77,9 @@ Trois modèles sont utilisés dans ce projet :
 
 - **SAM-GAN :** Ce modèle vise à entraîner les générateurs à apprendre les relations de mappage entre les domaines source et cible. Le modèle SAM-GAN est divisé en deux parties principales : un générateur et un discriminateur, le générateur étant constitué d'un encodeur de contenu, d'un encodeur de style et d'un décodeur. Le discriminateur guide le générateur pendant la formation en apprenant la distribution des images dans les domaines source et cible, ce qui permet au générateur de générer une carte plus réaliste <sup>[5](https://www.mdpi.com/2220-9964/12/4/159)</sup>.
 
-Nous avons eu recours à la librairie PyTorch pour
+Nous avons eu recours à la librairie PyTorch pour la programmation et le fonctionnement de l'algorithme.
+
+
 -----------------------------------------------------------------------------
 
 *Three models are used in this project:*
@@ -94,6 +96,9 @@ Nous avons eu recours à la librairie PyTorch pour
 
 
 ![alt text](https://www.mdpi.com/ijgi/ijgi-12-00159/article_deploy/html/images/ijgi-12-00159-g002.png?raw=true)
+
+
+We used the PyTorch library to program and run the algorithm.
 
 ## Interface graphique / Graphic interface
 
@@ -119,11 +124,11 @@ L'onglet "Cartographie GAN" permet de voir la comparaison entre le résultat obt
 
 *For the second option, the address or place name is sent to a code function that queries the Google Maps site to retrieve the GPS coordinates. The rest of the procedure is similar to the first option.*
 
-![alt text](https://github.com/Orolol/sat2plan/blob/readme-8/schema/interface-1.JPG?raw=true)
+![alt text](https://github.com/Orolol/sat2plan/blob/main/schema/interface-1.JPG?raw=true)
 
 The "GAN mapping" tab shows a comparison between the results obtained by the generative adversarial neural network (left) and the Google Maps map (right).
 
-![alt text](https://github.com/Orolol/sat2plan/blob/readme-8/schema/interface-2.JPG?raw=true)
+![alt text](https://github.com/Orolol/sat2plan/blob/main/schema/interface-2.JPG?raw=true)
 
 ## Licence
 Ce projet est placé sous la licence MIT. Voir [LICENSE](https://opensource-org.translate.goog/license/mit?_x_tr_sl=en&_x_tr_tl=fr&_x_tr_hl=fr&_x_tr_pto=wapp) pour plus d'informations.

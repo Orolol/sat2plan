@@ -72,7 +72,8 @@ def get_images(loc):
 
         # Collage image dans fichier de sortie
         out.paste(im, (0, 0))
-        y = torch.tensor(out, dtype=torch.float32)
+        convert_tensor = transforms.ToTensor()
+        y = convert_tensor(out)
         y_saturated: torch.Tensor = kornia.enhance.adjust_contrast(
             y, 0.3)
 

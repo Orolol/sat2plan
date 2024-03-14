@@ -72,7 +72,7 @@ def get_images(loc):
         # Collage image dans fichier de sortie
         out.paste(im, (0, 0))
         y_saturated: torch.Tensor = kornia.enhance.adjust_contrast(
-            out, 0.8)
+            out, 0.3)
 
         # Sauvegarde du fichier de sortie
         repertoire[carte] = os.path.join(path, f"adresse_{carte}.png")

@@ -86,7 +86,7 @@ def pred(path) -> np.ndarray:
     netG.load_state_dict(pred_model)
     y_pred = netG(image_satellite)
     y_saturated: torch.Tensor = kornia.enhance.adjust_contrast(
-        y_pred, 0.8)
+        y_pred, 0.3)
     save_image(
         y_saturated, f"{path}/adresse_generee.png", normalize=True)
     return y_pred

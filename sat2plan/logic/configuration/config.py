@@ -12,8 +12,8 @@ class Model_Configuration:
         self.beta2 = 0.999
 
         self.stride = 1
-        self.padding = 2
-        self.kernel_size = 4
+        self.padding = 1
+        self.kernel_size = 3
 
     def items(self):
         return self.__dict__.items()
@@ -31,7 +31,7 @@ class Global_Configuration:
 
         self.n_cpu = 6
 
-        self.batch_size = 1
+        self.batch_size = 2
         self.n_epochs = 200
         self.sample_interval = 10
 

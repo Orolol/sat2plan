@@ -3,7 +3,7 @@
 # SAT2PLAN
 
 <details>
-<summary>Version Française</summary>
+<summary><img src="https://fr.wikipedia.org/wiki/Drapeau_de_la_France#/media/Fichier:Flag_of_France_(1794%E2%80%931815,_1830%E2%80%931974).svg" alt="Drapeau français" style="vertical-align: middle;"> Version Française</summary>
 
 Projet développé dans le cadre de la formation **Data Science & AI** de [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course).
 

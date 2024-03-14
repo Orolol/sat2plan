@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import torch
+import kornia
 from torchvision.utils import save_image
 
 from pathlib import Path
@@ -84,8 +85,10 @@ def pred(path) -> np.ndarray:
 
     netG.load_state_dict(pred_model)
     y_pred = netG(image_satellite)
+    y_saturated: torch.Tensor = kornia.enhance.adjust_saturation(
+        y_pred, 0.3)
     save_image(
-        y_pred, f"{path}/adresse_generee.png", normalize=True)
+        y_saturated, f"{path}/adresse_generee.png", normalize=True)
     return y_pred
 
 

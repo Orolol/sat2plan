@@ -36,7 +36,7 @@ def comparaison_image(satellite, cartographie):
     # Fonction
     # st.write("# Cartographie GAN")
     image_comparison(img1=satellite,
-                     label1="Image satellite",
+                     label1="Image générée par le GAN",
                      img2=cartographie,
                      label2='Cartographie',
                      starting_position=50)

@@ -115,7 +115,7 @@ L'onglet "Cartographie GAN" permet de voir la comparaison entre le résultat obt
 
 *For the second option, the address or place name is sent to a code function that queries the Google Maps site to retrieve the GPS coordinates. The rest of the procedure is similar to the first option.*
 
-![alt text](https://github.com/Orolol/sat2plan/blob/main/schema/interface-1.jpg?raw=true)
+![alt text](https://github.com/Orolol/sat2plan/blob/readme-8/schema/interface-1.JPG?raw=true)
 
 The "GAN mapping" tab shows a comparison between the results obtained by the generative adversarial neural network (left) and the Google Maps map (right).
 

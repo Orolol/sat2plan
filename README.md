@@ -49,6 +49,9 @@ every convolution. At the final layer a 1x1 convolution is used to map each 64 c
 
 ![alt text](https://www.mdpi.com/ijgi/ijgi-12-00159/article_deploy/html/images/ijgi-12-00159-g002.png?raw=true)
 
-## Licence
+## Graphic interface
 
-This project is licensed under the MIT licence. See the [LICENSE] file (https://opensource.org/license/mit) for more information.
+
+## Licence
+Ce projet est placé sous la licence MIT. Voir [LICENSE](https://opensource.org/license/mit) pour plus d'informations.
+<span style="color:grey">*This project is licensed under the MIT licence. See [LICENSE](https://opensource.org/license/mit) for more information.*</span>

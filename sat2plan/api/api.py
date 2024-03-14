@@ -2,7 +2,9 @@ import requests
 import os
 import kornia
 import torch
+from torchvision import transforms
 from torchvision.utils import save_image
+
 from PIL import Image
 import shutil
 from sat2plan.scripts.params import API_KEY

@@ -3,7 +3,7 @@
 # SAT2PLAN
 
 <details>
-<summary><img src="https://github.com/Orolol/sat2plan/tree/main/schema/france.jpg" alt="Drapeau français" style="vertical-align: middle;"> Version Française</summary>
+<summary><img src="https://github.com/Orolol/sat2plan/blob/readme-11/schema/france.jpg" alt="Drapeau français" style="vertical-align: middle;"> Version Française</summary>
 
 Projet développé dans le cadre de la formation **Data Science & AI** de [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course).
 

@@ -12,8 +12,8 @@ class Model_Configuration:
         self.beta2 = 0.999
 
         self.stride = 1
-        self.padding = 1
-        self.kernel_size = 3
+        self.padding = 2
+        self.kernel_size = 4
 
     def items(self):
         return self.__dict__.items()

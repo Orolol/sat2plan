@@ -1,13 +1,19 @@
 ![alt text](https://github.com/Orolol/sat2plan/blob/main/sat2plan/interface/icone/satellite_lewagon.jpg?raw=true)
 
 # SAT2PLAN
-Project developed for the **Data Science & AI** training course at [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course).
+Projet développé dans le cadre de la formation **Data Science & AI** de [Le Wagon Paris] (https://www.lewagon.com/fr/paris/data-science-course).
 
-The sat2plan project aims to retrieve a satellite image from Google Maps for a given address or GPS coordinates, then reconstruct maps using a generative antagonistic neural network (GAN).
+Le projet **SAT2PLAN** vise à récupérer une image satellite à partir de Google Maps pour une adresse ou des coordonnées GPS données, puis à reconstruire des cartes à l'aide d'un réseau de neurones antagonistes génératif (GAN).
+
+-----------------------------------------------------------------------------
+
+*Project developed for the **Data Science & AI** training course at [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course).*
+
+*The **SAT2PLAN** project aims to retrieve a satellite image from Google Maps for a given address or GPS coordinates, then reconstruct maps using a generative antagonistic neural network (GAN).*
 
 ## Context
 
-The sat2plan project is a group initiative as part of the **Data Science & AI** course offered by [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course). It falls within the field of computer vision and artificial intelligence, with the aim of creating a system capable of reconstructing 2D maps from satellite images retrieved from Google Maps.
+The **SAT2PLAN** project is a group initiative as part of the **Data Science & AI** course offered by [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course). It falls within the field of computer vision and artificial intelligence, with the aim of creating a system capable of reconstructing 2D maps from satellite images retrieved from Google Maps.
 
 
 ![alt text](https://github.com/Orolol/sat2plan/blob/main/schema/schema-1.jpg?raw=true)
@@ -55,4 +61,4 @@ every convolution. At the final layer a 1x1 convolution is used to map each 64 c
 ## Licence
 Ce projet est placé sous la licence MIT. Voir [LICENSE](https://opensource.org/license/mit) pour plus d'informations.
 
-*<span style="font-size:0.5em; color:grey">This project is licensed under the MIT licence. See [LICENSE](https://opensource.org/license/mit) for more information.</span>*
+*This project is licensed under the MIT licence. See [LICENSE](https://opensource.org/license/mit) for more information.*

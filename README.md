@@ -87,7 +87,7 @@ Ce projet est placé sous la licence MIT. Voir [LICENSE](https://opensource-org.
 
 
 <details>
-<summary>English version</summary>
+<summary><img src="https://github.com/Orolol/sat2plan/blob/readme-11/schema/english.jpg" alt="Drapeau français" style="vertical-align: middle;"  width="10" height="10">English version</summary>
 
 Project developed for the **Data Science & AI** training course at [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course).
 

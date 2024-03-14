@@ -55,7 +55,9 @@ Ils se composent de deux modèles distincts :
 *GANs were developed by Ian Goodfellow in 2014 and first described in the paper [Generative Adversarial Nets](https://proceedings.neurips.cc/paper_files/paper/2014/file/5ca3e9b122f61f8f06494c97b1afccf3-Paper.pdf).*
 
 *They consist of two distinct models:*
+
 *- **The generator :** Its aim is to generate 'false' images that resemble the training images.*
+
 *- **The discriminator :** Its aim is to examine an image and determine whether it is a genuine training image or a false image from the generator.*
 
 ### Comment fonctionne le GAN / How GAN works
@@ -70,9 +72,9 @@ Trois modèles sont utilisés dans ce projet :
 
 - **U-net :** Il se compose d'un chemin contractuel (côté gauche) et d'un chemin expansif (côté droit). Le chemin de contraction suit l’architecture typique d’un réseau convolutif. Il consiste en l'application répétée de deux convolutions 3x3 (convolutions non rembourrées), chacune suivie d'une unité linéaire rectifiée (ReLU) et d'une opération de pooling max 2x2 avec pas de 2 pour le sous-échantillonnage. Chaque étape du chemin expansif consiste en un suréchantillonnage de la carte de fonctionnalités suivi d'une convolution 2x2 (« convolution ascendante ») qui réduit de moitié le nombre de canaux de fonctionnalités, une concaténation avec la carte de fonctionnalités recadrée en conséquence du chemin de contraction, et deux 3x3 convolutions, chacune suivie d'un ReLU. Le recadrage est nécessaire en raison de la perte de pixels de bordure à chaque circonvolution. Au niveau de la couche finale, une convolution 1x1 est utilisée pour mapper chaque vecteur de caractéristiques de 64 composants au nombre souhaité de classes. Au total, le réseau comporte 23 couches convolutives <sup>[2](https://arxiv.org/pdf/1505.04597.pdf)</sup>.
 
-- **UVC-GAN :** Il s'agit d'une méthode améliorée pour effectuer un transfert de style image à image non apparié basé sur un framework CycleGAN. Associé à une nouvelle architecture de générateur hybride UNet-ViT (UNet-Vision Transformer) et à une pré-formation auto-supervisée, il permet d'obtenir des résultats de pointe sur une multitude de benchmarks de transfert de style <sup>[3](https ://arxiv.org/pdf/2203.02557.pdf)</sup> <sup>[4](https://github.com/ls4gan/uvcgan)</sup>.
+- **UVC-GAN :** Il s'agit d'une méthode améliorée pour effectuer un transfert de style image à image non apparié basé sur un framework CycleGAN. Associé à une nouvelle architecture de générateur hybride UNet-ViT (UNet-Vision Transformer) et à une pré-formation auto-supervisée, il permet d'obtenir des résultats de pointe sur une multitude de benchmarks de transfert de style <sup>[3](https://arxiv.org/pdf/2203.02557.pdf)</sup><sup>[4](https://github.com/ls4gan/uvcgan)</sup>.
 
-- **SAM-GAN :** Ce modèle vise à entraîner les générateurs à apprendre les relations de mappage entre les domaines source et cible. Le modèle SAM-GAN est divisé en deux parties principales : un générateur et un discriminateur, le générateur étant constitué d'un encodeur de contenu, d'un encodeur de style et d'un décodeur. Le discriminateur guide le générateur pendant la formation en apprenant la distribution des images dans les domaines source et cible, ce qui permet au générateur de générer une carte plus réaliste. <sup>[5](https://www.mdpi.com /2220-9964/12/4/159)</sup>.
+- **SAM-GAN :** Ce modèle vise à entraîner les générateurs à apprendre les relations de mappage entre les domaines source et cible. Le modèle SAM-GAN est divisé en deux parties principales : un générateur et un discriminateur, le générateur étant constitué d'un encodeur de contenu, d'un encodeur de style et d'un décodeur. Le discriminateur guide le générateur pendant la formation en apprenant la distribution des images dans les domaines source et cible, ce qui permet au générateur de générer une carte plus réaliste <sup>[5](https://www.mdpi.com/2220-9964/12/4/159)</sup>.
 
 -----------------------------------------------------------------------------
 
@@ -93,12 +95,36 @@ Trois modèles sont utilisés dans ce projet :
 
 ## Interface graphique / Graphic interface
 
+L'utilisation du modèle se fait par l'intermédiaire d'une interface graphique codé en python avec la librairie Streamlit.
+L'utilisateur peut choisir de rentrer l'une des deux options suivantes:
+- **Les coordonnées GPS (latitude, longitude)**
+- **L'adresse ou le nom du lieu**
+
+Pour la première option, la latitude et la longitude sont envoyé vers l'API qui se charge de récupérer l'image satellite et le plan sur le site Google Maps et affiche l'image satellite sur l'interface pour illustration dans l'onglet "Import Google Maps".
+
+Pour la deuxième option, l'adresse ou le nom du lieu est envoyé vers une fonction du code qui procède à une requête que le site de Google Maps pour récupérer les coordonnées GPS. La suite de la procédure est analogue à la première option.
+
+L'onglet "Cartographie GAN" permet de voir la comparaison entre le résultat obtenu par le réseau de neurones antagoniste génératif (à gauche) et le plan de Google Maps (à droite).
 
 -----------------------------------------------------------------------------
 
+*The model is used via a graphical interface coded in Python with the Streamlit library.*
+*The user can choose to enter one of the following two options:*
+*- **GPS coordinates (latitude, longitude)***
+*- **The address or name of the place***
+
+*For the first option, the latitude and longitude are sent to the API which is responsible for retrieving the satellite image and the map from the Google Maps site and displays the satellite image on the interface for illustration in the "Import Google Maps" tab.*
+
+*For the second option, the address or place name is sent to a code function that queries the Google Maps site to retrieve the GPS coordinates. The rest of the procedure is similar to the first option.*
+
+![alt text](https://github.com/Orolol/sat2plan/blob/readme-8/schema/interface-1.JPG?raw=true)
+
+The "GAN mapping" tab shows a comparison between the results obtained by the generative adversarial neural network (left) and the Google Maps map (right).
+
+![alt text](https://github.com/Orolol/sat2plan/blob/readme-8/schema/interface-2.JPG?raw=true)
 
 ## Licence
-Ce projet est placé sous la licence MIT. Voir [LICENSE](https://opensource.org/license/mit) pour plus d'informations.
+Ce projet est placé sous la licence MIT. Voir [LICENSE](https://opensource-org.translate.goog/license/mit?_x_tr_sl=en&_x_tr_tl=fr&_x_tr_hl=fr&_x_tr_pto=wapp) pour plus d'informations.
 
 -----------------------------------------------------------------------------
 

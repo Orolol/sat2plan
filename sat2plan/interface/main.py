@@ -54,7 +54,7 @@ def train_ucvgan():
 
 def train_sam_gan():
 
-    data_bucket = 'data-10k'
+    data_bucket = 'data-1k'
     # export_params_txt()
 
     print(Fore.YELLOW + "Training sam_gan" + Style.RESET_ALL)

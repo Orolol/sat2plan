@@ -1,7 +1,7 @@
 ![alt text](https://github.com/Orolol/sat2plan/blob/main/sat2plan/interface/icone/satellite_lewagon.jpg?raw=true)
 
 # SAT2PLAN
-Projet développé dans le cadre de la formation **Data Science & AI** de [Le Wagon Paris] (https://www.lewagon.com/fr/paris/data-science-course).
+Projet développé dans le cadre de la formation **Data Science & AI** de [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course).
 
 Le projet **SAT2PLAN** vise à récupérer une image satellite à partir de Google Maps pour une adresse ou des coordonnées GPS données, puis à reconstruire des cartes à l'aide d'un réseau de neurones antagonistes génératif (GAN).
 
@@ -12,6 +12,10 @@ Le projet **SAT2PLAN** vise à récupérer une image satellite à partir de Goog
 *The **SAT2PLAN** project aims to retrieve a satellite image from Google Maps for a given address or GPS coordinates, then reconstruct maps using a generative antagonistic neural network (GAN).*
 
 ## Context
+
+Le projet **SAT2PLAN** est une initiative collective dans le cadre de la formation **Data Science & AI** proposée par [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course). Il s'inscrit dans le domaine de la vision par ordinateur et de l'intelligence artificielle, avec pour objectif de créer un système capable de reconstruire des cartes en 2D à partir d'images satellites récupérées sur Google Maps.
+
+-----------------------------------------------------------------------------
 
 The **SAT2PLAN** project is a group initiative as part of the **Data Science & AI** course offered by [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course). It falls within the field of computer vision and artificial intelligence, with the aim of creating a system capable of reconstructing 2D maps from satellite images retrieved from Google Maps.
 

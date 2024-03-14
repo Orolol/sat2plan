@@ -55,7 +55,9 @@ Ils se composent de deux modèles distincts :
 *GANs were developed by Ian Goodfellow in 2014 and first described in the paper [Generative Adversarial Nets](https://proceedings.neurips.cc/paper_files/paper/2014/file/5ca3e9b122f61f8f06494c97b1afccf3-Paper.pdf).*
 
 *They consist of two distinct models:*
+
 *- **The generator :** Its aim is to generate 'false' images that resemble the training images.*
+
 *- **The discriminator :** Its aim is to examine an image and determine whether it is a genuine training image or a false image from the generator.*
 
 ### Comment fonctionne le GAN / How GAN works
@@ -119,6 +121,7 @@ L'onglet "Cartographie GAN" permet de voir la comparaison entre le résultat obt
 
 The "GAN mapping" tab shows a comparison between the results obtained by the generative adversarial neural network (left) and the Google Maps map (right).
 
+![alt text](https://github.com/Orolol/sat2plan/blob/readme-8/schema/interface-2.JPG?raw=true)
 
 ## Licence
 Ce projet est placé sous la licence MIT. Voir [LICENSE](https://opensource-org.translate.goog/license/mit?_x_tr_sl=en&_x_tr_tl=fr&_x_tr_hl=fr&_x_tr_pto=wapp) pour plus d'informations.

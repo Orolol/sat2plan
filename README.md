@@ -55,4 +55,4 @@ every convolution. At the final layer a 1x1 convolution is used to map each 64 c
 ## Licence
 Ce projet est placé sous la licence MIT. Voir [LICENSE](https://opensource.org/license/mit) pour plus d'informations.
 
-<span style="color:grey"; font-size:0.5em; >*This project is licensed under the MIT licence. See [LICENSE](https://opensource.org/license/mit) for more information.*</span>
+<span style="color:grey"><font size=”0.5”>*This project is licensed under the MIT licence. See [LICENSE](https://opensource.org/license/mit) for more information.*</font></span>

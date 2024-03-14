@@ -131,7 +131,6 @@ class StyleEncoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, in_channels, out_channels, style_channels):
         super(Decoder, self).__init__()
-        print(in_channels, out_channels, style_channels)
         self.conv1 = nn.Conv2d(
             in_channels, 512, kernel_size=3, stride=1, padding=1)
         self.norm1 = nn.InstanceNorm2d(512, affine=True)
@@ -160,11 +159,9 @@ class Decoder(nn.Module):
         self.tanh = nn.Tanh()
 
     def forward(self, content_features, style_features):
-        print(content_features.shape, style_features.shape)
         out = self.relu(self.norm1(self.conv1(content_features)))
         out = self.residual_blocks(out)
         out = self.adain(out, style_features)  # Utiliser AdaIN
-        print(out.shape)
         out = self.upsampling(out)
         out = self.tanh(self.norm2(self.conv2(out)))
 
@@ -240,7 +237,6 @@ class Discriminator(nn.Module):
 
     def forward(self, real_img, generated_img):
         # Concatenate along the channel dimension
-        print(real_img.shape, generated_img.shape)
         x = torch.cat([real_img, generated_img], dim=1)
         x = F.leaky_relu(self.conv1(x), 0.2)
         x = F.leaky_relu(self.conv2(x), 0.2)

@@ -39,7 +39,7 @@ Le projet **SAT2PLAN** est une initiative collective dans le cadre de la formati
 
 *- **Data cleaning :** Prior to use in the project, a data cleaning process was carried out. This includes the removal of duplicates and irrelevant plans. This cleaning ensures that only relevant, quality data is used in the project, improving the efficiency and accuracy of the GAN model.*
 
-## Generative adversarial networks
+## Réseaux antagonistes génératifs / Generative adversarial networks
 
 
 ![alt text](https://github.com/Orolol/sat2plan/blob/main/schema/schema-2.jpg?raw=true)
@@ -58,14 +58,14 @@ Ils se composent de deux modèles distincts :
 *- **The generator :** Its aim is to generate 'false' images that resemble the training images.*
 *- **The discriminator :** Its aim is to examine an image and determine whether it is a genuine training image or a false image from the generator.*
 
-### How gan works
+### Comment fonctionne le GAN / How GAN works
 Pendant l'entraînement, le générateur essaie constamment de déjouer le discriminateur en produisant des images de plus en plus fausses, tandis que le discriminateur s'efforce de devenir un meilleur détective et de classer correctement les vraies et les fausses images. L'équilibre de ce jeu est atteint lorsque le générateur produit des faux parfaits qui semblent provenir directement des données d'entraînement, et que le discriminateur doit toujours deviner, avec un degré de confiance de 50 %, si les résultats du générateur sont vrais ou faux
 
 -----------------------------------------------------------------------------
 
 *During training, the generator constantly tries to outwit the discriminator by producing increasingly false images, while the discriminator strives to become a better detective and correctly classify true and false images. The equilibrium of this game is reached when the generator generates perfect fakes that appear to come directly from the training data, and the discriminator must always guess, with 50% confidence, whether the generator's output is real or fake <sup>[1](https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html)</sup>.*
 
-### Alternative models
+### Modèles alternatifs / Alternative models
 Trois modèles sont utilisés dans ce projet :
 
 - **U-net :** Il se compose d'un chemin contractuel (côté gauche) et d'un chemin expansif (côté droit). Le chemin de contraction suit l’architecture typique d’un réseau convolutif. Il consiste en l'application répétée de deux convolutions 3x3 (convolutions non rembourrées), chacune suivie d'une unité linéaire rectifiée (ReLU) et d'une opération de pooling max 2x2 avec pas de 2 pour le sous-échantillonnage. Chaque étape du chemin expansif consiste en un suréchantillonnage de la carte de fonctionnalités suivi d'une convolution 2x2 (« convolution ascendante ») qui réduit de moitié le nombre de canaux de fonctionnalités, une concaténation avec la carte de fonctionnalités recadrée en conséquence du chemin de contraction, et deux 3x3 convolutions, chacune suivie d'un ReLU. Le recadrage est nécessaire en raison de la perte de pixels de bordure à chaque circonvolution. Au niveau de la couche finale, une convolution 1x1 est utilisée pour mapper chaque vecteur de caractéristiques de 64 composants au nombre souhaité de classes. Au total, le réseau comporte 23 couches convolutives <sup>[2](https://arxiv.org/pdf/1505.04597.pdf)</sup>.
@@ -91,7 +91,10 @@ Trois modèles sont utilisés dans ce projet :
 
 ![alt text](https://www.mdpi.com/ijgi/ijgi-12-00159/article_deploy/html/images/ijgi-12-00159-g002.png?raw=true)
 
-## Graphic interface
+## Interface graphique / Graphic interface
+
+
+-----------------------------------------------------------------------------
 
 
 ## Licence

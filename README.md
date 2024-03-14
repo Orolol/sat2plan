@@ -1,6 +1,15 @@
 ![alt text](https://github.com/Orolol/sat2plan/blob/main/sat2plan/interface/icone/satellite_lewagon.jpg?raw=true)
 
 # SAT2PLAN
+
+<details>
+<summary>Version Française</summary>
+
+
+
+
+
+
 Projet développé dans le cadre de la formation **Data Science & AI** de [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course).
 
 Le projet **SAT2PLAN** vise à récupérer une image satellite à partir de Google Maps pour une adresse ou des coordonnées GPS données, puis à reconstruire des cartes à l'aide d'un réseau de neurones antagonistes génératif (GAN).
@@ -136,3 +145,7 @@ Ce projet est placé sous la licence MIT. Voir [LICENSE](https://opensource-org.
 -----------------------------------------------------------------------------
 
 *This project is licensed under the MIT licence. See [LICENSE](https://opensource.org/license/mit) for more information.*
+
+
+
+</details>

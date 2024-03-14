@@ -47,7 +47,7 @@ def get_images(loc):
 
     # Création du répertoire adresse qui contiendra l'image satellite de l'adresse donnée
     path = os.path.join(os.getcwd(), "data/adresse/", f"{loc[0]}_{loc[1]}")
-    os.mkdir(path, 0o777)
+    os.makedirs(path, exist_ok=True)
 
     format = ['roadmap', 'satellite']
 
@@ -73,9 +73,8 @@ def get_images(loc):
         # Sauvegarde du fichier de sortie
         repertoire[carte] = os.path.join(path, f"adresse_{carte}.png")
         out.save(repertoire[carte])
-    pred()
+    pred(path)
     repertoire['generee'] = os.path.join(path, f"adresse_generee.png")
-    pred()
 
     return repertoire
 

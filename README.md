@@ -1,11 +1,13 @@
-# sat2plan
+# SAT2PLAN
+Project developed for the **Data Science & AI** training course at [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course).
 
-This is a project about generating plan from satellite view, using a GAN model.
+The sat2plan project aims to retrieve a satellite image from Google Maps for a given address or GPS coordinates, then reconstruct it using a generative antagonistic neural network (GAN).
+
+## Context
+
+The sat2plan project is a group initiative as part of the **Data Science & AI** course offered by [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course). It falls within the field of computer vision and artificial intelligence, with the aim of creating a system capable of reconstructing 2D maps from satellite images retrieved from Google Maps.
 
 ## Dataset
-
-The dataset is composed of 2 parts:
-- Satellite images
-- Plan images
-
-There's about 100k images in each part.
+- Automatically collects around 100,000 image pairs from the Google Maps API.
+- Script to collect more data if required.
+- The images collected cover a satellite view and a map around 32 American and European cities, approximately on a square of 1000 km².

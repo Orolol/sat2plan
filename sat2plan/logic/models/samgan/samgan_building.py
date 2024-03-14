@@ -27,8 +27,10 @@ class SeBlock(nn.Module):
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ResidualBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, out_channels,
+                               kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels,
+                               kernel_size=3, stride=1, padding=1)
         self.norm = nn.InstanceNorm2d(out_channels, affine=True)
         self.relu = nn.ReLU(inplace=True)
 
@@ -57,11 +59,13 @@ class AdaIN(nn.Module):
 
         # Normaliser les caractéristiques de contenu
         content_mean = torch.mean(content_features, dim=(2, 3), keepdim=True)
-        content_std = torch.std(content_features, dim=(2, 3), keepdim=True) + 1e-8
+        content_std = torch.std(
+            content_features, dim=(2, 3), keepdim=True) + 1e-8
         normalized_content = (content_features - content_mean) / content_std
 
         # Appliquer le style aux caractéristiques de contenu normalisées
-        normalized_content = normalized_content * var.unsqueeze(2).unsqueeze(3) + mean.unsqueeze(2).unsqueeze(3)
+        normalized_content = normalized_content * \
+            var.unsqueeze(2).unsqueeze(3) + mean.unsqueeze(2).unsqueeze(3)
 
         return normalized_content
 
@@ -69,17 +73,24 @@ class AdaIN(nn.Module):
 class ContentEncoder(nn.Module):
     def __init__(self, in_channels, num_residual_blocks=7):
         super(ContentEncoder, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=7, stride=1, padding=3)
+        self.conv1 = nn.Conv2d(
+            in_channels, 64, kernel_size=7, stride=1, padding=3)
         self.norm1 = nn.InstanceNorm2d(64, affine=True)
         self.relu = nn.ReLU(inplace=True)
         self.se_block = SeBlock(64)
         self.downsampling = nn.Sequential(
-            *[nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
-              nn.InstanceNorm2d(64, affine=True),
-              nn.ReLU(inplace=True)]
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.InstanceNorm2d(128, affine=True),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
+            nn.InstanceNorm2d(256, affine=True),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1),
+            nn.InstanceNorm2d(512, affine=True),
+            nn.ReLU(inplace=True)
         )
         self.residual_blocks = nn.Sequential(
-            *[ResidualBlock(64, 64) for _ in range(num_residual_blocks)]
+            *[ResidualBlock(512, 512) for _ in range(num_residual_blocks)]
         )
 
     def forward(self, x):
@@ -96,15 +107,16 @@ class StyleEncoder(nn.Module):
         super(StyleEncoder, self).__init__()
         self.convs = nn.ModuleList([
             nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1),
             nn.ReLU(inplace=True)
         ])
-        for _ in range(3):
-            self.convs.extend([
-                nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
-                nn.ReLU(inplace=True)
-            ])
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(64, in_channels)
+        self.fc = nn.Linear(512, in_channels)
 
     def forward(self, x):
         for conv in self.convs:
@@ -119,19 +131,30 @@ class StyleEncoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, in_channels, out_channels, style_channels):
         super(Decoder, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
-        self.norm1 = nn.InstanceNorm2d(64, affine=True)
+        self.conv1 = nn.Conv2d(
+            in_channels, 512, kernel_size=3, stride=1, padding=1)
+        self.norm1 = nn.InstanceNorm2d(512, affine=True)
         self.relu = nn.ReLU(inplace=True)
         self.residual_blocks = nn.Sequential(
-            *[ResidualBlock(64, 64) for _ in range(2)]
+            *[ResidualBlock(512, 512) for _ in range(2)]
         )
-        self.adain = AdaIN(64, style_channels)  # Ajouter AdaIN
+        self.adain = AdaIN(512, style_channels)  # Ajouter AdaIN
         self.upsampling = nn.Sequential(
-            *[nn.ConvTranspose2d(64, 64, kernel_size=3, stride=2, padding=1, output_padding=1),
-              nn.InstanceNorm2d(64, affine=True),
-              nn.ReLU(inplace=True)]
+            nn.ConvTranspose2d(512, 256, kernel_size=3,
+                               stride=2, padding=1, output_padding=1),
+            nn.InstanceNorm2d(256, affine=True),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(256, 128, kernel_size=3,
+                               stride=2, padding=1, output_padding=1),
+            nn.InstanceNorm2d(128, affine=True),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(128, 64, kernel_size=3,
+                               stride=2, padding=1, output_padding=1),
+            nn.InstanceNorm2d(64, affine=True),
+            nn.ReLU(inplace=True)
         )
-        self.conv2 = nn.Conv2d(64, out_channels, kernel_size=7, stride=1, padding=3)
+        self.conv2 = nn.Conv2d(
+            64, out_channels, kernel_size=7, stride=1, padding=3)
         self.norm2 = nn.InstanceNorm2d(out_channels, affine=True)
         self.tanh = nn.Tanh()
 
@@ -150,7 +173,8 @@ class SAM_GAN(nn.Module):
         super(SAM_GAN, self).__init__()
         self.content_encoder = ContentEncoder(in_channels, num_residual_blocks)
         self.style_encoder = StyleEncoder(out_channels)
-        self.decoder = Decoder(64, out_channels, out_channels)  # Passer out_channels à Decoder
+        # Passer out_channels à Decoder
+        self.decoder = Decoder(512, out_channels, out_channels)
 
     def forward(self, content_img, style_imgs=None):
         if style_imgs is None:
@@ -203,14 +227,17 @@ class SAM_GAN(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, in_channels):
         super(Discriminator, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels*2, 64, kernel_size=4, stride=2, padding=35)
+        self.conv1 = nn.Conv2d(
+            in_channels*2, 64, kernel_size=4, stride=2, padding=35)
         self.conv2 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=35)
         self.conv3 = nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=35)
         self.conv4 = nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=35)
-        self.conv5 = nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=35)
+        self.conv5 = nn.Conv2d(
+            512, in_channels, kernel_size=4, stride=1, padding=35)
 
     def forward(self, real_img, generated_img):
-        x = torch.cat([real_img, generated_img], dim=1)  # Concatenate along the channel dimension
+        # Concatenate along the channel dimension
+        x = torch.cat([real_img, generated_img], dim=1)
         x = F.leaky_relu(self.conv1(x), 0.2)
         x = F.leaky_relu(self.conv2(x), 0.2)
         x = F.leaky_relu(self.conv3(x), 0.2)

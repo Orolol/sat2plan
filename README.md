@@ -3,7 +3,7 @@
 # SAT2PLAN
 
 <details>
-<summary><img src="https://github.com/Orolol/sat2plan/blob/readme-11/schema/france.jpg" alt="Drapeau français" style="vertical-align: middle;"  width="20" height="20"> Version Française</summary>
+<summary><img src="https://github.com/Orolol/sat2plan/blob/readme-11/schema/france.jpg" alt="Drapeau français" style="vertical-align: middle;"  width="15" height="15"> Version Française</summary>
 
 Projet développé dans le cadre de la formation **Data Science & AI** de [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course).
 
@@ -87,7 +87,7 @@ Ce projet est placé sous la licence MIT. Voir [LICENSE](https://opensource-org.
 
 
 <details>
-<summary><img src="https://github.com/Orolol/sat2plan/blob/readme-11/schema/english.jpg" alt="Drapeau français" style="vertical-align: middle;"  width="20" height="20">English version</summary>
+<summary><img src="https://github.com/Orolol/sat2plan/blob/readme-11/schema/english.jpg" alt="Drapeau français" style="vertical-align: middle;"  width="15" height="15">English version</summary>
 
 Project developed for the **Data Science & AI** training course at [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course).
 

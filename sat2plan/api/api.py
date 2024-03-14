@@ -2,6 +2,7 @@ import requests
 import os
 import kornia
 import torch
+from torchvision.utils import save_image
 from PIL import Image
 import shutil
 from sat2plan.scripts.params import API_KEY
@@ -71,12 +72,14 @@ def get_images(loc):
 
         # Collage image dans fichier de sortie
         out.paste(im, (0, 0))
+        y = torch.tensor(out, dtype=torch.float32)
         y_saturated: torch.Tensor = kornia.enhance.adjust_contrast(
-            out, 0.3)
+            y, 0.3)
 
         # Sauvegarde du fichier de sortie
         repertoire[carte] = os.path.join(path, f"adresse_{carte}.png")
-        y_saturated.save(repertoire[carte])
+        save_image(y_saturated, repertoire[carte], normalize=True)
+        # y_saturated.save(repertoire[carte])
     pred(path)
     repertoire['generee'] = os.path.join(path, f"adresse_generee.png")
 

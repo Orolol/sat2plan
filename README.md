@@ -9,7 +9,9 @@ The sat2plan project aims to retrieve a satellite image from Google Maps for a g
 
 The sat2plan project is a group initiative as part of the **Data Science & AI** course offered by [Le Wagon Paris](https://www.lewagon.com/fr/paris/data-science-course). It falls within the field of computer vision and artificial intelligence, with the aim of creating a system capable of reconstructing 2D maps from satellite images retrieved from Google Maps.
 
-![alt text](https://github.com/Orolol/sat2plan/blob/main/temp/42622e7d-982d-4e40-9e03-c8228d934e5c.jpg?raw=true)
+
+![alt text](https://github.com/Orolol/sat2plan/blob/main/schema/schema-1.jpg?raw=true)
+
 
 ## Features
 
@@ -21,7 +23,12 @@ The sat2plan project is a group initiative as part of the **Data Science & AI** 
 
 ## Generative adversarial networks
 
-![alt text](https://github.com/Orolol/sat2plan/blob/main/temp/47e254f2-0e70-4d4e-b844-762c312c349a.jpg?raw=true)
+
+![alt text](https://github.com/Orolol/sat2plan/blob/main/schema/schema_2.jpg?raw=true)
+
+
+
+
 
 
 

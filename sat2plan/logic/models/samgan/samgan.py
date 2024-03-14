@@ -192,7 +192,7 @@ class SAMGAN():
                         (x[:], y_fake[:], y[:]), dim=2)
 
                     save_image(
-                        concatenated_images, f"images/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
+                        concatenated_images, f"images/_{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
 
                 # export_loss(params_json, epoch+1, idx+1, L1.item(), G_loss.item(), D_loss.item(), Global_Configuration())
             loss_df = pd.DataFrame(

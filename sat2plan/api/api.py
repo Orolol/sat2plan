@@ -3,25 +3,7 @@ import os
 from PIL import Image
 import shutil
 from sat2plan.scripts.params import API_KEY
-
-def coordonnees_gps(ville):
-    """
-    Cette fonction se base sur l'application du Wagon pour obtenir la lattitude et la longitude d'une ville donnée
-    """
-
-    # Adresse URL de l'application du Wagon
-    url = f'https://weather.lewagon.com/geo/1.0/direct?q={ville}'
-
-    # Récupération du dictionnaire sous format json
-    response = requests.get(url).json()
-
-    # Latitude
-    lat = response[0]['lat']
-
-    # Longitude
-    lon = response[0]['lon']
-
-    return lat, lon
+from sat2plan.interface.main import pred
 
 
 def conversion_adresse_coordonnees_gps(adresse):
@@ -32,10 +14,10 @@ def conversion_adresse_coordonnees_gps(adresse):
     """
 
     # Remplacement des espaces sous le format Google
-    adresse = adresse.replace(' ','%20')
+    adresse = adresse.replace(' ', '%20')
 
     # Adresse de la requête
-    url = f'https://maps.googleapis.com/maps/api/geocode/json?address={adresse}&key={API_KEY}'
+    url = f'https://maps.googleapis.com/maps/api/geocode/json?address={adresse}&zoom=17&size=512x512&key={API_KEY}'
 
     # Récupération du dictionnaire sous format json
     response = requests.get(url).json()
@@ -53,20 +35,21 @@ def conversion_adresse_coordonnees_gps(adresse):
     else:
         return None
 
+
 def get_images(loc):
     """
     Cette fonction récupère l'image satellite pour des coordonnées GPS données
     Elle stocke l'image satellitaire dans un répertoire "adresse" qui sera située dans le répertoire "data"
     """
 
-    # Supression du répertoire "adresse" ancien
-    shutil.rmtree('data/adresse',ignore_errors=True)
+    # # Supression du répertoire "adresse" ancien
+    # shutil.rmtree('data/adresse', ignore_errors=True)
 
     # Création du répertoire adresse qui contiendra l'image satellite de l'adresse donnée
-    path = os.path.join(os.getcwd(), "data/adresse/")
-    os.mkdir(path, 0o777)
+    path = os.path.join(os.getcwd(), "data/adresse/", f"{loc[0]}_{loc[1]}")
+    os.makedirs(path, exist_ok=True)
 
-    format = ['roadmap','satellite']
+    format = ['roadmap', 'satellite']
 
     repertoire = {}
 
@@ -75,8 +58,8 @@ def get_images(loc):
         out = Image.new('RGB', (512, 512))
 
         # Adresse de la requête
-        url = "https://maps.googleapis.com/maps/api/staticmap?center={},{}&zoom=17&size=1280x1280&maptype={}&style=feature:all%7Celement:labels%7Cvisibility:off&key={}".format(
-                loc[0], loc[1], carte, API_KEY)
+        url = "https://maps.googleapis.com/maps/api/staticmap?center={},{}&zoom=17&size=640x640&maptype={}&style=feature:all%7Celement:labels%7Cvisibility:off&key={}".format(
+            loc[0], loc[1], carte, API_KEY)
 
         # Lecture de l'image
         im = Image.open(requests.get(url, stream=True).raw)
@@ -88,8 +71,10 @@ def get_images(loc):
         out.paste(im, (0, 0))
 
         # Sauvegarde du fichier de sortie
-        repertoire[carte] = os.path.join(path, f"adresse_{carte}.jpg")
+        repertoire[carte] = os.path.join(path, f"adresse_{carte}.png")
         out.save(repertoire[carte])
+    pred(path)
+    repertoire['generee'] = os.path.join(path, f"adresse_generee.png")
 
     return repertoire
 

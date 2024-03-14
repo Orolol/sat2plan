@@ -15,6 +15,7 @@ from sat2plan.logic.models.ucvgan.ucvgan import UCVGan, Generator
 from sat2plan.logic.models.unet.unet import Unet
 from sat2plan.logic.models.samgan.samgan import SAMGAN
 from sat2plan.scripts.flow import load_pred_model
+from sat2plan.logic.preproc.dataset import transform_only_mask
 
 pred_model = None
 
@@ -39,7 +40,7 @@ def train_unet():
 
 def train_ucvgan():
 
-    data_bucket = 'data-1k'
+    data_bucket = 'data-10k'
     # export_params_txt()
 
     print(Fore.YELLOW + "Training UCVGan" + Style.RESET_ALL)
@@ -65,17 +66,17 @@ def train_sam_gan():
     sam_gan.train()
 
 
-def pred(image_satellite_path="pred_images/000015_San_Diego_32.66616_-117.09823.png") -> np.ndarray:
+def pred(path) -> np.ndarray:
     pred_model = None
     if pred_model is None:
         pred_model = load_pred_model()
 
     image_satellite = np.asarray(Image.open(
-        image_satellite_path).convert('RGB'))
+        f"{path}/adresse_satellite.png").convert('RGB'))
 
     # convert image to tensor
-    image_satellite = image_satellite / 255
-    image_satellite = np.transpose(image_satellite, (2, 0, 1))
+    image_satellite = transform_only_mask(image=image_satellite)["image"]
+
     image_satellite = np.expand_dims(image_satellite, axis=0)
     image_satellite = torch.tensor(image_satellite, dtype=torch.float32)
 
@@ -84,7 +85,7 @@ def pred(image_satellite_path="pred_images/000015_San_Diego_32.66616_-117.09823.
     netG.load_state_dict(pred_model)
     y_pred = netG(image_satellite)
     save_image(
-        y_pred, f"pred_images/test.png", normalize=True)
+        y_pred, f"{path}/adresse_generee.png", normalize=True)
     return y_pred
 
 

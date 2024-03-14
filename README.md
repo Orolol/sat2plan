@@ -48,6 +48,7 @@ Les GAN ont été développés par Ian Goodfellow en 2014 et décrits pour la pr
 
 Ils se composent de deux modèles distincts :
 - **Le générateur :** Son but est de générer de "fausses" images qui ressemblent aux images d'apprentissage.
+
 - **Le discriminateur :** Son but est d'examiner une image et de déterminer s'il s'agit d'une véritable image d'apprentissage ou d'une fausse image provenant du générateur.
 
 -----------------------------------------------------------------------------
@@ -76,6 +77,7 @@ Trois modèles sont utilisés dans ce projet :
 
 - **SAM-GAN :** Ce modèle vise à entraîner les générateurs à apprendre les relations de mappage entre les domaines source et cible. Le modèle SAM-GAN est divisé en deux parties principales : un générateur et un discriminateur, le générateur étant constitué d'un encodeur de contenu, d'un encodeur de style et d'un décodeur. Le discriminateur guide le générateur pendant la formation en apprenant la distribution des images dans les domaines source et cible, ce qui permet au générateur de générer une carte plus réaliste <sup>[5](https://www.mdpi.com/2220-9964/12/4/159)</sup>.
 
+Nous avons eu recours à la librairie PyTorch pour
 -----------------------------------------------------------------------------
 
 *Three models are used in this project:*

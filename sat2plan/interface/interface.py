@@ -53,7 +53,7 @@ def image_cote_a_cote(satellite, cartographie):
 
     # Colonne de gauche
     with col1:
-        st.header(f"Image satellite")
+        st.header(f"Image générée par le GAN")
         st.image(satellite)
 
     # Colonne de droite

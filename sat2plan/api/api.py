@@ -6,26 +6,6 @@ from sat2plan.scripts.params import API_KEY
 from sat2plan.interface.main import pred
 
 
-def coordonnees_gps(ville):
-    """
-    Cette fonction se base sur l'application du Wagon pour obtenir la lattitude et la longitude d'une ville donnée
-    """
-
-    # Adresse URL de l'application du Wagon
-    url = f'https://weather.lewagon.com/geo/1.0/direct?q={ville}'
-
-    # Récupération du dictionnaire sous format json
-    response = requests.get(url).json()
-
-    # Latitude
-    lat = response[0]['lat']
-
-    # Longitude
-    lon = response[0]['lon']
-
-    return lat, lon
-
-
 def conversion_adresse_coordonnees_gps(adresse):
     """
     Cette fonction convertit une adresse postale ou le nom d'un lieu en coordonnées GPS
@@ -62,11 +42,11 @@ def get_images(loc):
     Elle stocke l'image satellitaire dans un répertoire "adresse" qui sera située dans le répertoire "data"
     """
 
-    # Supression du répertoire "adresse" ancien
-    shutil.rmtree('data/adresse', ignore_errors=True)
+    # # Supression du répertoire "adresse" ancien
+    # shutil.rmtree('data/adresse', ignore_errors=True)
 
     # Création du répertoire adresse qui contiendra l'image satellite de l'adresse donnée
-    path = os.path.join(os.getcwd(), "data/adresse/")
+    path = os.path.join(os.getcwd(), "data/adresse/", f"{loc[0]}_{loc[1]}")
     os.mkdir(path, 0o777)
 
     format = ['roadmap', 'satellite']

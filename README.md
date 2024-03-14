@@ -103,6 +103,7 @@ Pour la première option, la latitude et la longitude sont envoyé vers l'API qu
 Pour la deuxième option, l'adresse ou le nom du lieu est envoyé vers une fonction du code qui procède à une requête que le site de Google Maps pour récupérer les coordonnées GPS. La suite de la procédure est analogue à la première option.
 
 L'onglet "Cartographie GAN" permet de voir la comparaison entre le résultat obtenu par le réseau de neurones antagoniste génératif (à gauche) et le plan de Google Maps (à droite).
+
 -----------------------------------------------------------------------------
 
 *The model is used via a graphical interface coded in Python with the Streamlit library.*

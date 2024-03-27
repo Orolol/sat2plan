@@ -118,9 +118,9 @@ class UCVGan():
             print("Available GPU :", torch.cuda.device_count())
             print("Rank :", self.rank)
             self.netD = nn.parallel.DistributedDataParallel(
-                self.netD, device_ids=[self.rank], output_device=self.rank).to(self.rank)
+                self.netD, device_ids=[self.rank], output_device=self.rank)
             self.netG = nn.parallel.DistributedDataParallel(
-                self.netG, device_ids=[self.rank], output_device=self.rank).to(self.rank)
+                self.netG, device_ids=[self.rank], output_device=self.rank)
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))

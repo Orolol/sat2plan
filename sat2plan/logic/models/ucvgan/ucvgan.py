@@ -91,14 +91,14 @@ class UCVGan():
         eta = eta.expand(self.batch_size, real_images.size(
             1), real_images.size(2), real_images.size(3))
         if self.cuda:
-            eta = eta.to(device)
+            eta = eta.to(self.device)
         else:
             eta = eta
 
         interpolated = eta * real_images + ((1 - eta) * fake_images)
 
         if self.cuda:
-            interpolated = interpolated.to(device)
+            interpolated = interpolated.to(self.device)
         else:
             interpolated = interpolated
 
@@ -111,7 +111,7 @@ class UCVGan():
         # calculate gradients of probabilities with respect to examples
         gradients = autograd.grad(outputs=prob_interpolated, inputs=interpolated,
                                   grad_outputs=torch.ones(
-                                      prob_interpolated.size()).to(device) if self.cuda else torch.ones(
+                                      prob_interpolated.size()).to(self.device) if self.cuda else torch.ones(
                                       prob_interpolated.size()),
                                   create_graph=True, retain_graph=True)[0]
 
@@ -140,9 +140,10 @@ class UCVGan():
         self.cuda = True if torch.cuda.is_available() else False
         if self.cuda:
             print("Cuda is available")
-            device = torch.device('cuda')
-            self.netD = nn.DataParallel(self.netD).to(device)
-            self.netG = nn.DataParallel(self.netG).to(device)
+            self.device = torch.device('cuda')
+            print("Available GPU :", torch.cuda.device_count())
+            self.netD = nn.DataParallel(self.netD).to(self.device)
+            self.netG = nn.DataParallel(self.netG).to(self.device)
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))
@@ -189,8 +190,8 @@ class UCVGan():
             for idx, (x, y, to_save) in enumerate(self.train_dl):
 
                 if self.cuda:
-                    x = x .to(device)
-                    y = y.to(device)
+                    x = x .to(self.device)
+                    y = y.to(self.device)
 
                 self.OptimizerD.zero_grad()
                 self.OptimizerG.zero_grad()
@@ -309,8 +310,8 @@ class UCVGan():
             ############## Discriminator ##############
 
             if self.cuda:
-                x = x .to(device)
-                y = y.to(device)
+                x = x .to(self.device)
+                y = y.to(self.device)
 
             # Measure discriminator's ability to classify real from generated samples
             y_fake = self.netG(x)

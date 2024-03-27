@@ -99,8 +99,8 @@ class UCVGan():
         os.environ['MASTER_PORT'] = '12345'
         dist.init_process_group(
             "gloo", rank=self.rank, world_size=self.world_size)
-        self.netD = Discriminator(in_channels=3)
-        self.netG = Generator(in_channels=3)
+        self.netD = Discriminator(in_channels=3).to(self.rank)
+        self.netG = Generator(in_channels=3).to(self.rank)
         self.starting_epoch = 0
 
         if self.load_model:

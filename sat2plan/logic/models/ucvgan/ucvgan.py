@@ -103,6 +103,8 @@ class UCVGan():
         self.netG = Generator(in_channels=3).to(self.rank)
         self.starting_epoch = 0
 
+        torch.autograd.set_detect_anomaly(True)
+
         if self.load_model:
             model_and_optimizer, epoch = load_model()
             self.netG.load_state_dict(model_and_optimizer['gen_state_dict'])

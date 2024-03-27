@@ -95,8 +95,10 @@ class UCVGan():
     # Create models, optimizers ans losses
 
     def create_models(self):
-        # dist.init_process_group(
-        #     "Initialize rank", rank=self.rank, world_size=self.world_size)
+        os.environ['MASTER_ADDR'] = 'localhost'
+        os.environ['MASTER_PORT'] = '12345'
+        dist.init_process_group(
+            "gloo", rank=self.rank, world_size=self.world_size)
         self.netD = Discriminator(in_channels=3)
         self.netG = Generator(in_channels=3)
         self.starting_epoch = 0
@@ -112,7 +114,7 @@ class UCVGan():
         if self.cuda:
 
             print("Cuda is available")
-            self.device = torch.device('cuda')
+            # self.device = torch.device('cuda')
             print("Available GPU :", torch.cuda.device_count())
             print("Rank :", self.rank)
             self.netD = nn.parallel.DistributedDataParallel(

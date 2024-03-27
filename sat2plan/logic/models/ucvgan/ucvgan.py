@@ -95,8 +95,8 @@ class UCVGan():
     # Create models, optimizers ans losses
 
     def create_models(self):
-        dist.init_process_group(
-            "Initialize rank", rank=self.rank, world_size=self.world_size)
+        # dist.init_process_group(
+        #     "Initialize rank", rank=self.rank, world_size=self.world_size)
         self.netD = Discriminator(in_channels=3)
         self.netG = Generator(in_channels=3)
         self.starting_epoch = 0

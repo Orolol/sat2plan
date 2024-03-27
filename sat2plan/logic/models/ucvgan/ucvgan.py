@@ -119,8 +119,8 @@ class UCVGan():
             # self.device = torch.device('cuda')
             print("Available GPU :", torch.cuda.device_count())
             print("Rank :", self.rank)
-            self.netD = nn.parallel.DistributedDataParallel(
-                self.netD, device_ids=[self.rank], output_device=self.rank)
+            # self.netD = nn.parallel.DistributedDataParallel(
+            #     self.netD, device_ids=[self.rank], output_device=self.rank)
             self.netG = nn.parallel.DistributedDataParallel(
                 self.netG, device_ids=[self.rank], output_device=self.rank)
 

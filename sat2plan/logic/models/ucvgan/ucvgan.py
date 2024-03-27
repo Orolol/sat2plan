@@ -140,8 +140,8 @@ class UCVGan():
         self.cuda = True if torch.cuda.is_available() else False
         if self.cuda:
             print("Cuda is available")
-            self.netD = self.netD.cuda()
-            self.netG = self.netG.cuda()
+            self.netD = nn.DataParallel(self.netD).cuda()
+            self.netG = nn.DataParallel(self.netG).cuda()
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))

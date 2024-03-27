@@ -41,17 +41,11 @@ def train_unet():
 
 def train_ucvgan():
     print(Fore.YELLOW + "Training UCVGan" + Style.RESET_ALL)
-    # download_bucket_folder(data_bucket, val_size=0.05)
-
-    print("Running uvcgan training")
-    # train_model(data_bucket=data_bucket)
     world_size = 2
     mp.spawn(UCVGan,
              args=(world_size,),
              nprocs=world_size,
              join=True)
-    # ucvgan = UCVGan(data_bucket=data_bucket)
-    # ucvgan.train()
 
 
 def train_sam_gan():

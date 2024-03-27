@@ -95,7 +95,8 @@ class UCVGan():
     # Create models, optimizers ans losses
 
     def create_models(self):
-
+        dist.init_process_group(
+            "Initialize rank", rank=self.rank, world_size=self.world_size)
         self.netD = Discriminator(in_channels=3)
         self.netG = Generator(in_channels=3)
         self.starting_epoch = 0
@@ -115,9 +116,9 @@ class UCVGan():
             print("Available GPU :", torch.cuda.device_count())
             print("Rank :", self.rank)
             self.netD = nn.parallel.DistributedDataParallel(
-                self.netD, device_ids=[self.rank]).to(self.rank)
+                self.netD, device_ids=[self.rank], output_device=self.rank).to(self.rank)
             self.netG = nn.parallel.DistributedDataParallel(
-                self.netG, device_ids=[self.rank]).to(self.rank)
+                self.netG, device_ids=[self.rank], output_device=self.rank).to(self.rank)
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))

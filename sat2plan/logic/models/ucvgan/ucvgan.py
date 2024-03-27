@@ -142,8 +142,10 @@ class UCVGan():
             print("Cuda is available")
             self.device = torch.device('cuda')
             print("Available GPU :", torch.cuda.device_count())
-            self.netD = nn.DataParallel(self.netD).to(self.device)
-            self.netG = nn.DataParallel(self.netG).to(self.device)
+            self.netD = nn.DataParallel(
+                self.netD, device_ids=[0, 1]).to(self.device)
+            self.netG = nn.DataParallel(
+                self.netG, device_ids=[0, 1]).to(self.device)
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))

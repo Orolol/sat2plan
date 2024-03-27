@@ -14,11 +14,11 @@ from torch import autograd
 import pandas as pd
 
 from sat2plan.logic.models.ucvgan.model_building import Generator, Discriminator
-
+from sat2plan.logic.loss.loss import GradientPenalty
 from sat2plan.scripts.flow import save_results, save_model, load_model
 
 from sat2plan.logic.preproc.dataset import Satellite2Map_Data
-from sat2plan.logic.preproc.sauvegarde_params import ouverture_fichier_json, export_loss
+
 
 # Modèle Unet
 
@@ -179,6 +179,9 @@ class UCVGan():
         print("Total params in Generator :", pytorch_total_params_G)
         print("Total params in Discriminator :", pytorch_total_params_D)
 
+        gradient_penalty = GradientPenalty(
+            self.batch_size, self.lambda_gp, device=self.device)
+
         loss = []
 
         for epoch in range(self.starting_epoch, self.n_epochs):
@@ -213,9 +216,13 @@ class UCVGan():
                 # gradient_penalty.backward()
                 D_loss = (D_fake_loss + D_real_loss) / 2
 
+                gp = gradient_penalty(
+                    self.netD, y.detach(), y_fake.detach(), x)
+                D_loss_W = D_loss + gp
+
                 # Backward and optimize
-                self.Dis_loss.append(D_loss.item())
-                D_loss.backward()
+                self.Dis_loss.append(D_loss_W.item())
+                D_loss_W.backward()
                 self.OptimizerD.step()
 
                 ############## Train Generator ##############
@@ -236,12 +243,12 @@ class UCVGan():
 
                 # Save the loss
                 loss.append({"epoch": epoch, "batch": idx,
-                            "loss_g": G_loss.item(), "loss_d": D_loss.item()})
+                            "loss_g": G_loss.item(), "loss_d": D_loss_W.item()})
 
                 if idx % 100 == 0:
                     print(
                         "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                        % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss.item(), G_loss.item())
+                        % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), D_loss_W.item(), G_loss.item())
                     )
                     concatenated_images = torch.cat(
                         (x[:], y_fake[:], y[:]), dim=2)
@@ -253,7 +260,6 @@ class UCVGan():
             loss_df = pd.DataFrame(
                 loss, columns=["epoch", "batch", "loss_g", "loss_d"])
             if epoch == 0:
-
                 # append loss to CSV
                 loss_df.to_csv("save/loss/loss.csv", mode="a", header=True)
 

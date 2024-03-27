@@ -4,7 +4,7 @@ import os
 import torch
 import torch.nn as nn
 import torch.distributed as dist
-import torch.multiprocessing as mp
+
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
@@ -26,7 +26,7 @@ from sat2plan.logic.preproc.dataset import Satellite2Map_Data
 
 
 class UCVGan():
-    def __init__(self, data_bucket='data-1k', rank=None, world_size=None):
+    def __init__(self, rank, world_size):
 
         # Import des paramètres globaux
         self.G_CFG = Global_Configuration()
@@ -36,8 +36,8 @@ class UCVGan():
         self.world_size = world_size
 
         self.device = self.G_CFG.device
-        self.train_dir = f"{self.G_CFG.train_dir}/{data_bucket}"
-        self.val_dir = f"{self.G_CFG.val_dir}/{data_bucket}"
+        self.train_dir = f"{self.G_CFG.train_dir}/{self.G_CFG.data_bucket}"
+        self.val_dir = f"{self.G_CFG.val_dir}/{self.G_CFG.data_bucket}"
 
         self.image_size = self.G_CFG.image_size
 
@@ -71,6 +71,8 @@ class UCVGan():
 
         # If True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest
         torch.backends.cudnn.benchmark = True
+
+        self.train()
 
     # Load datasets from train/val directories
     def dataloading(self):
@@ -111,10 +113,11 @@ class UCVGan():
             print("Cuda is available")
             self.device = torch.device('cuda')
             print("Available GPU :", torch.cuda.device_count())
-            self.netD = nn.DataParallel(
-                self.netD).to(self.device)
-            self.netG = nn.parallel.DataParallel(
-                self.netG).to(self.device)
+            print("Rank :", self.rank)
+            self.netD = nn.parallel.DistributedDataParallel(
+                self.netD, device_ids=[self.rank]).to(self.rank)
+            self.netG = nn.parallel.DistributedDataParallel(
+                self.netG, device_ids=[self.rank]).to(self.rank)
 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))
@@ -153,7 +156,7 @@ class UCVGan():
         print("Total params in Discriminator :", pytorch_total_params_D)
 
         gradient_penalty = GradientPenalty(
-            self.batch_size, self.lambda_gp, device=self.device)
+            self.batch_size, self.lambda_gp, device=self.rank)
 
         loss = []
 
@@ -161,8 +164,8 @@ class UCVGan():
             for idx, (x, y, to_save) in enumerate(self.train_dl):
 
                 if self.cuda:
-                    x = x .to(self.device)
-                    y = y.to(self.device)
+                    x = x .to(self.rank)
+                    y = y.to(self.rank)
 
                 self.OptimizerD.zero_grad()
                 self.OptimizerG.zero_grad()
@@ -281,8 +284,8 @@ class UCVGan():
             ############## Discriminator ##############
 
             if self.cuda:
-                x = x .to(self.device)
-                y = y.to(self.device)
+                x = x .to(self.rank)
+                y = y.to(self.rank)
 
             # Measure discriminator's ability to classify real from generated samples
             y_fake = self.netG(x)

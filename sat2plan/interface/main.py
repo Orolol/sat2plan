@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torchvision.utils import save_image
+import torch.multiprocessing as mp
 
 from pathlib import Path
 from colorama import Fore, Style
@@ -39,17 +40,18 @@ def train_unet():
 
 
 def train_ucvgan():
-
-    data_bucket = 'data-1k'
-    # export_params_txt()
-
     print(Fore.YELLOW + "Training UCVGan" + Style.RESET_ALL)
-    download_bucket_folder(data_bucket, val_size=0.05)
+    # download_bucket_folder(data_bucket, val_size=0.05)
 
-    print("Running unet training")
+    print("Running uvcgan training")
     # train_model(data_bucket=data_bucket)
-    ucvgan = UCVGan(data_bucket=data_bucket)
-    ucvgan.train()
+    world_size = 2
+    mp.spawn(UCVGan,
+             args=(world_size,),
+             nprocs=world_size,
+             join=True)
+    # ucvgan = UCVGan(data_bucket=data_bucket)
+    # ucvgan.train()
 
 
 def train_sam_gan():

@@ -38,6 +38,55 @@ class ConvBlock(nn.Module):
         return self.dropout(x) if self.use_dropout else x
 
 
+class UVCCNNlock(nn.Module):
+    def __init__(self, in_channels, out_channels,  kernel_size=3, stride=1, padding=1, down=True):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride,
+                      padding, bias=False, padding_mode="reflect")
+            if down
+            else nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding, bias=False),
+            nn.InstanceNorm2d(out_channels),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(out_channels, out_channels, kernel_size, stride,
+                      padding, bias=False, padding_mode="reflect")
+            if down
+            else nn.ConvTranspose2d(out_channels, out_channels, kernel_size, stride, padding, bias=False),
+            nn.InstanceNorm2d(out_channels),
+            nn.LeakyReLU(0.2),
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
+
+class DownsamplingBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=2, stride=2, padding=0):
+        super().__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride,
+                      padding, padding_mode="reflect"),
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
+
+class UpsamplingBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
+        super().__init__()
+        self.conv = nn.Sequential(
+            nn.Upsample(scale_factor=2),
+            nn.ConvTranspose2d(in_channels, out_channels,
+                               kernel_size, stride, padding),
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
+
 class TransformerBlock(nn.Module):
 
     def __init__(

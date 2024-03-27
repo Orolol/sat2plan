@@ -40,7 +40,7 @@ def train_unet():
 
 def train_ucvgan():
 
-    data_bucket = 'data-10k'
+    data_bucket = 'data-1k'
     # export_params_txt()
 
     print(Fore.YELLOW + "Training UCVGan" + Style.RESET_ALL)

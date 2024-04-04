@@ -116,8 +116,7 @@ class UCVGan():
             #     self.netD, device_ids=[self.rank], output_device=self.rank)
             self.netG = nn.parallel.DistributedDataParallel(
                 self.netG, device_ids=[self.rank], output_device=self.rank)
-            dist.init_process_group(
-                "gloo", rank=self.rank, world_size=self.world_size)
+
         elif self.tpu:
             print("TPU is available")
             print("Rank :", self.rank)

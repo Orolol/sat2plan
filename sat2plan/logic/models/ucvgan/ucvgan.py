@@ -99,7 +99,7 @@ class UCVGan():
     def create_models(self):
         # Check Cuda
         self.cuda = True if torch.cuda.is_available() else False
-        self.tpu = True if xm.xla_device_exists() else False
+        self.tpu = True if xm.xla_device() else False
         if self.cuda:
             print("Cuda is available")
             # self.device = torch.device('cuda')

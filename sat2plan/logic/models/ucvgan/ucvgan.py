@@ -108,6 +108,8 @@ class UCVGan():
             print("Available GPU :", torch.cuda.device_count())
             print("Rank :", self.rank)
             self.device = self.rank
+            dist.init_process_group(
+                "gloo", rank=self.rank, world_size=self.world_size)
             # self.netD = nn.parallel.DistributedDataParallel(
             #     self.netD, device_ids=[self.rank], output_device=self.rank)
             self.netG = nn.parallel.DistributedDataParallel(

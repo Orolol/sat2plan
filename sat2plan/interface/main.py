@@ -46,7 +46,7 @@ def train_ucvgan():
     data_bucket = 'data-1k'
     download_bucket_folder(data_bucket, val_size=0.1)
     cuda = torch.cuda.is_available()
-    tpu = xm.xla_device_exists()
+    tpu = xm.xla_device()
 
     if cuda:
         print(f"Using CUDA with {torch.cuda.device_count()} devices")

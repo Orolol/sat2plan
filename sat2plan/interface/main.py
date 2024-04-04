@@ -56,8 +56,8 @@ def train_ucvgan():
                  nprocs=world_size,
                  join=True)
     elif tpu:
-        print(f"Using TPU with {xm.xrt_world_size()} devices")
-        world_size = xm.xrt_world_size()
+        print(f"Using TPU with 8 devices")
+        world_size = 8
         mp.spawn(UCVGan,
                  args=(world_size,),
                  nprocs=world_size,

@@ -95,12 +95,27 @@ class UCVGan():
     # Create models, optimizers ans losses
 
     def create_models(self):
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12345'
-        dist.init_process_group(
-            "gloo", rank=self.rank, world_size=self.world_size)
-        self.netD = Discriminator(in_channels=3).to(self.rank)
-        self.netG = Generator(in_channels=3).to(self.rank)
+        # Check Cuda
+        self.cuda = True if torch.cuda.is_available() else False
+        if self.cuda:
+            print("Cuda is available")
+            # self.device = torch.device('cuda')
+            print("Available GPU :", torch.cuda.device_count())
+            print("Rank :", self.rank)
+            self.device = self.rank
+            # self.netD = nn.parallel.DistributedDataParallel(
+            #     self.netD, device_ids=[self.rank], output_device=self.rank)
+            self.netG = nn.parallel.DistributedDataParallel(
+                self.netG, device_ids=[self.rank], output_device=self.rank)
+            dist.init_process_group(
+                "gloo", rank=self.rank, world_size=self.world_size)
+        else:
+            self.device = torch.device(
+                "cuda" if torch.cuda.is_available() else "cpu")
+
+        self.netD = Discriminator(in_channels=3).to(self.device)
+        self.netG = Generator(in_channels=3).to(self.device)
+
         self.starting_epoch = 0
 
         torch.autograd.set_detect_anomaly(True)
@@ -110,20 +125,6 @@ class UCVGan():
             self.netG.load_state_dict(model_and_optimizer['gen_state_dict'])
             self.netD.load_state_dict(model_and_optimizer['disc_state_dict'])
             self.starting_epoch = epoch
-
-        # Check Cuda
-        self.cuda = True if torch.cuda.is_available() else False
-        if self.cuda:
-
-            print("Cuda is available")
-            # self.device = torch.device('cuda')
-            print("Available GPU :", torch.cuda.device_count())
-            print("Rank :", self.rank)
-            # self.netD = nn.parallel.DistributedDataParallel(
-            #     self.netD, device_ids=[self.rank], output_device=self.rank)
-            self.netG = nn.parallel.DistributedDataParallel(
-                self.netG, device_ids=[self.rank], output_device=self.rank)
-
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
@@ -161,7 +162,7 @@ class UCVGan():
         print("Total params in Discriminator :", pytorch_total_params_D)
 
         gradient_penalty = GradientPenalty(
-            self.batch_size, self.lambda_gp, device=self.rank)
+            self.batch_size, self.lambda_gp, device=self.device)
 
         loss = []
 
@@ -169,8 +170,8 @@ class UCVGan():
             for idx, (x, y, to_save) in enumerate(self.train_dl):
 
                 if self.cuda:
-                    x = x .to(self.rank)
-                    y = y.to(self.rank)
+                    x = x .to(self.device)
+                    y = y.to(self.device)
 
                 self.OptimizerD.zero_grad()
                 self.OptimizerG.zero_grad()
@@ -289,8 +290,8 @@ class UCVGan():
             ############## Discriminator ##############
 
             if self.cuda:
-                x = x .to(self.rank)
-                y = y.to(self.rank)
+                x = x .to(self.device)
+                y = y.to(self.device)
 
             # Measure discriminator's ability to classify real from generated samples
             y_fake = self.netG(x)

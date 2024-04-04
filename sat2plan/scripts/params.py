@@ -19,3 +19,6 @@ MLFLOW_MODEL_NAME = os.environ.get("MLFLOW_MODEL_NAME")
 MODEL_TARGET = os.environ.get("MODEL_TARGET")
 
 API_KEY = os.environ.get("API_KEY")
+
+MASTER_ADDR = os.environ.get("MASTER_ADDR")
+MASTER_PORT = os.environ.get("MASTER_PORT")

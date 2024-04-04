@@ -41,7 +41,7 @@ def train_unet():
 
 def train_ucvgan():
     print(Fore.YELLOW + "Training UCVGan" + Style.RESET_ALL)
-    world_size = 2
+    world_size = np.max([(torch.cuda.device_count(), 1)])
     mp.spawn(UCVGan,
              args=(world_size,),
              nprocs=world_size,

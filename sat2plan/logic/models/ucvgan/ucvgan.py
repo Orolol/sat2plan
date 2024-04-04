@@ -108,6 +108,8 @@ class UCVGan():
             print("Available GPU :", torch.cuda.device_count())
             print("Rank :", self.rank)
             self.device = self.rank
+            os.environ['MASTER_ADDR'] = 'localhost'
+            os.environ['MASTER_PORT'] = '12355'
             dist.init_process_group(
                 "gloo", rank=self.rank, world_size=self.world_size)
             # self.netD = nn.parallel.DistributedDataParallel(

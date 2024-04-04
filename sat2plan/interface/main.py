@@ -3,6 +3,8 @@ import pandas as pd
 import torch
 from torchvision.utils import save_image
 import torch.multiprocessing as mp
+import torch_xla
+import torch_xla.core.xla_model as xm
 
 from pathlib import Path
 from colorama import Fore, Style
@@ -43,11 +45,29 @@ def train_ucvgan():
     print(Fore.YELLOW + "Training UCVGan" + Style.RESET_ALL)
     data_bucket = 'data-1k'
     download_bucket_folder(data_bucket, val_size=0.1)
-    world_size = np.max([(torch.cuda.device_count(), 1)])
-    mp.spawn(UCVGan,
-             args=(world_size,),
-             nprocs=world_size,
-             join=True)
+    cuda = torch.cuda.is_available()
+    tpu = xm.xla_device_exists()
+
+    if cuda:
+        print(f"Using CUDA with {torch.cuda.device_count()} devices")
+        world_size = np.max([(torch.cuda.device_count(), 1)])
+        mp.spawn(UCVGan,
+                 args=(world_size,),
+                 nprocs=world_size,
+                 join=True)
+    elif tpu:
+        print(f"Using TPU with {xm.xrt_world_size()} devices")
+        world_size = xm.xrt_world_size()
+        mp.spawn(UCVGan,
+                 args=(world_size,),
+                 nprocs=world_size,
+                 join=True)
+    else:
+        print("No GPU/TPU available, using CPU")
+        mp.spawn(UCVGan,
+                 args=(1,),
+                 nprocs=1,
+                 join=True)
 
 
 def train_sam_gan():

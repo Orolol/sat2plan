@@ -4,6 +4,8 @@ import os
 import torch
 import torch.nn as nn
 import torch.distributed as dist
+import torch_xla
+import torch_xla.core.xla_model as xm
 
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
@@ -97,6 +99,7 @@ class UCVGan():
     def create_models(self):
         # Check Cuda
         self.cuda = True if torch.cuda.is_available() else False
+        self.tpu = True if xm.xla_device_exists() else False
         if self.cuda:
             print("Cuda is available")
             # self.device = torch.device('cuda')
@@ -109,6 +112,13 @@ class UCVGan():
                 self.netG, device_ids=[self.rank], output_device=self.rank)
             dist.init_process_group(
                 "gloo", rank=self.rank, world_size=self.world_size)
+        elif self.tpu:
+            print("TPU is available")
+            print("Rank :", self.rank)
+            self.device = xm.xla_device(n=self.rank, devkind='TPU')
+            self.netD = self.netD.to(self.device)
+            self.netG = self.netG.to(self.device)
+
         else:
             self.device = torch.device(
                 "cuda" if torch.cuda.is_available() else "cpu")

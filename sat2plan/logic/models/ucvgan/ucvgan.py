@@ -100,6 +100,8 @@ class UCVGan():
         # Check Cuda
         self.cuda = True if torch.cuda.is_available() else False
         self.tpu = True if xm.xla_device() else False
+        self.netD = Discriminator(in_channels=3).to(self.device)
+        self.netG = Generator(in_channels=3).to(self.device)
         if self.cuda:
             print("Cuda is available")
             # self.device = torch.device('cuda')
@@ -122,9 +124,6 @@ class UCVGan():
         else:
             self.device = torch.device(
                 "cuda" if torch.cuda.is_available() else "cpu")
-
-        self.netD = Discriminator(in_channels=3).to(self.device)
-        self.netG = Generator(in_channels=3).to(self.device)
 
         self.starting_epoch = 0
 

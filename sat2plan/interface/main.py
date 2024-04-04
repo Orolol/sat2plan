@@ -41,6 +41,8 @@ def train_unet():
 
 def train_ucvgan():
     print(Fore.YELLOW + "Training UCVGan" + Style.RESET_ALL)
+    data_bucket = 'data-1k'
+    download_bucket_folder(data_bucket, val_size=0.1)
     world_size = np.max([(torch.cuda.device_count(), 1)])
     mp.spawn(UCVGan,
              args=(world_size,),

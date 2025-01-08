@@ -14,7 +14,7 @@ class Discriminator(nn.Module):
         self.initial = nn.Sequential(
             nn.Conv2d(
                 in_channels*2, features[0], kernel_size, stride, padding, padding_mode="reflect"),
-            nn.LeakyReLU(0.2)
+            nn.LeakyReLU(0.2, inplace=False)
         )
 
         layers = []
@@ -53,7 +53,7 @@ class Generator(nn.Module):
         # Initial downsampling: (B, 3, 256, 256) -> (B, 48, 256, 256)
         self.initial_down = nn.Sequential(
             nn.Conv2d(in_channels, features, kernel_size, stride, padding, padding_mode="reflect", bias=False),
-            nn.LeakyReLU(0.2, inplace=True)
+            nn.LeakyReLU(0.2, inplace=False)
         )
 
         # Encoder blocks with reduced feature sizes

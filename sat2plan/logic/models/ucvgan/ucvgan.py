@@ -201,15 +201,21 @@ class UCVGan():
 
         # Initialize optimizers
         self.OptimizerD = torch.optim.Adam(
-            self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))
+            self.netD.parameters(), lr=self.learning_rate_D * 0.1, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
-            self.netG.parameters(), lr=self.learning_rate_G, betas=(self.beta1, self.beta2))
+            self.netG.parameters(), lr=self.learning_rate_G * 0.1, betas=(self.beta1, self.beta2))
 
-        # Initialize learning rate schedulers
-        self.schedulerD = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.OptimizerD, mode='min', factor=0.5, patience=5, verbose=True)
-        self.schedulerG = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.OptimizerG, mode='min', factor=0.5, patience=5, verbose=True)
+        # Initialize learning rate schedulers with warm restarts
+        self.schedulerD = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            self.OptimizerD, T_0=10, T_mult=2, eta_min=1e-6
+        )
+        self.schedulerG = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            self.OptimizerG, T_0=10, T_mult=2, eta_min=1e-6
+        )
+
+        # Warmup parameters
+        self.warmup_epochs = 5
+        self.warmup_factor = 0.1
 
         # Load model and optimizer states if requested
         if self.load_model:
@@ -243,6 +249,9 @@ class UCVGan():
         self.best_loss = float('inf')
         self.patience = 15
         self.patience_counter = 0
+
+        # Add small epsilon for numerical stability
+        self.eps = 1e-8
 
         return
 
@@ -302,16 +311,19 @@ class UCVGan():
                         D_real = self.netD(x, y)
                         D_fake = self.netD(x, y_fake.detach())
                         
-                        real_label = torch.ones_like(D_real)
-                        fake_label = torch.zeros_like(D_fake)
+                        real_label = torch.ones_like(D_real) * 0.9  # Label smoothing
+                        fake_label = torch.zeros_like(D_fake) + 0.1  # Label smoothing
                         
-                        D_real_loss = self.BCE_Loss(D_real, real_label)
-                        D_fake_loss = self.BCE_Loss(D_fake, fake_label)
+                        D_real_loss = self.BCE_Loss(D_real + self.eps, real_label)
+                        D_fake_loss = self.BCE_Loss(D_fake + self.eps, fake_label)
                         D_loss = (D_fake_loss + D_real_loss) / 2
                         gp = gradient_penalty(self.netD, y.detach(), y_fake.detach(), x)
                         D_loss_W = D_loss + gp
      
                     self.scaler.scale(D_loss_W).backward()
+                    # Add gradient clipping
+                    self.scaler.unscale_(self.OptimizerD)
+                    torch.nn.utils.clip_grad_norm_(self.netD.parameters(), max_norm=1.0)
                     self.scaler.step(self.OptimizerD)
 
                     ############## Train Generator ##############
@@ -324,6 +336,9 @@ class UCVGan():
                         G_loss = G_fake_loss + L1
 
                     self.scaler.scale(G_loss).backward()
+                    # Add gradient clipping
+                    self.scaler.unscale_(self.OptimizerG)
+                    torch.nn.utils.clip_grad_norm_(self.netG.parameters(), max_norm=1.0)
                     self.scaler.step(self.OptimizerG)
                     self.scaler.update()
 
@@ -381,9 +396,16 @@ class UCVGan():
                     print(f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
                     print("------------------------")
 
-                    # Update learning rate schedulers
-                    self.schedulerD.step(self.val_Dis_loss[-1])
-                    self.schedulerG.step(self.val_Gen_loss[-1])
+                    # Update learning rates with warmup
+                    if epoch < self.warmup_epochs:
+                        warmup_factor = self.warmup_factor + (1 - self.warmup_factor) * (epoch / self.warmup_epochs)
+                        for param_group in self.OptimizerD.param_groups:
+                            param_group['lr'] = self.learning_rate_D * warmup_factor * 0.1
+                        for param_group in self.OptimizerG.param_groups:
+                            param_group['lr'] = self.learning_rate_G * warmup_factor * 0.1
+                    else:
+                        self.schedulerD.step((epoch - self.warmup_epochs) + idx / len(self.train_dl))
+                        self.schedulerG.step((epoch - self.warmup_epochs) + idx / len(self.train_dl))
 
                     # Early stopping check
                     if val_loss < self.best_loss:
@@ -391,17 +413,17 @@ class UCVGan():
                         self.patience_counter = 0
                         if self.save_model_bool:
                             save_model(
-                                {"gen": self.netG, "disc": self.netD},
-                                {"gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD},
-                                suffix=f"-best"
+                                models={'gen': self.netG, 'disc': self.netD},
+                                optimizers={'gen_opt': self.OptimizerG, 'gen_disc': self.OptimizerD},
+                                suffix="-best"
                             )
                     else:
                         self.patience_counter += 1
 
                     if epoch % 20 == 0 and self.save_model_bool:
                         save_model(
-                            {"gen": self.netG, "disc": self.netD},
-                            {"gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD},
+                            models={'gen': self.netG, 'disc': self.netD},
+                            optimizers={'gen_opt': self.OptimizerG, 'gen_disc': self.OptimizerD},
                             suffix=f"-{epoch}"
                         )
                         save_results(params=self.M_CFG, metrics=dict(
@@ -418,8 +440,8 @@ class UCVGan():
             if self.rank == 0:
                 # Final save
                 save_model(
-                    {"gen": self.netG, "disc": self.netD},
-                    {"gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD},
+                    models={'gen': self.netG, 'disc': self.netD},
+                    optimizers={'gen_opt': self.OptimizerG, 'gen_disc': self.OptimizerD},
                     suffix=f"-final"
                 )
                 save_results(params=self.M_CFG, metrics=dict(

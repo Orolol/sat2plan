@@ -148,7 +148,7 @@ def load_model(stage="Production") -> torch.nn.Module:
         # Try to get epoch from filename, default to 0 if not found
         try:
             print(most_recent_model_path_on_disk)
-            epoch = int(most_recent_model_path_on_disk.split("/")[-1].split("-")[-2])
+            epoch = int(most_recent_model_path_on_disk.split("/")[-1].split("-")[-1].split(".")[0])
         except (ValueError, IndexError):
             epoch = 0
             

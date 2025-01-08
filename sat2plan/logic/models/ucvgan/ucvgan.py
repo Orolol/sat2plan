@@ -41,9 +41,11 @@ class UCVGan():
         self.beta1 = self.M_CFG.beta1
         self.beta2 = self.M_CFG.beta2
 
-        # Setup device
+        # Setup device et distributed
         self.setup_device()
-
+        if self.cuda:
+            torch.cuda.set_device(self.rank)
+            
         # Loading Data
         self.dataloading()
 
@@ -53,6 +55,10 @@ class UCVGan():
         # If True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest
         if self.cuda:
             torch.backends.cudnn.benchmark = True
+            
+        # Pour le debug des opérations inplace
+        if self.world_size > 1:
+            torch.autograd.set_detect_anomaly(True)
 
         self.train()
 
@@ -67,25 +73,33 @@ class UCVGan():
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
             
+            # Configuration du processus distribué
+            os.environ['MASTER_ADDR'] = 'localhost'
+            os.environ['MASTER_PORT'] = '12355'
+            dist.init_process_group(
+                "nccl", 
+                rank=self.rank, 
+                world_size=self.world_size,
+                timeout=datetime.timedelta(minutes=30)
+            )
+            
             # Pré-allocation de la mémoire CUDA
             torch.cuda.empty_cache()
             total_memory = torch.cuda.get_device_properties(self.rank).total_memory
             reserved_memory = int(total_memory * 0.95)  # Réserve 95% de la mémoire disponible
             torch.cuda.set_per_process_memory_fraction(0.95, self.rank)
             
-            # Création d'un cache de tenseurs pour réutilisation
-            self.tensor_cache = {}
-            
-            # Configuration du processus distribué
-            os.environ['MASTER_ADDR'] = 'localhost'
-            os.environ['MASTER_PORT'] = '12355'
-            dist.init_process_group(
-                "nccl", rank=self.rank, world_size=self.world_size)
-            
             print(f"GPU {self.rank}: Reserved {reserved_memory/1024**3:.1f}GB of VRAM")
         else:
             print("CUDA not available - Using CPU")
             self.device = torch.device("cpu")
+
+    def cleanup(self):
+        if self.cuda and self.world_size > 1:
+            dist.destroy_process_group()
+
+    def __del__(self):
+        self.cleanup()
 
     def get_cached_tensor(self, shape, dtype=torch.float32):
         """Récupère un tenseur du cache ou en crée un nouveau"""
@@ -210,151 +224,179 @@ class UCVGan():
 
     # Train & save models
     def train(self):
-        # Setup directories and logging
-        os.makedirs("save", exist_ok=True)
-        os.makedirs("save/loss", exist_ok=True)
-        os.makedirs("save/checkpoints", exist_ok=True)
-        params_json = open("params.json", mode="w", encoding='UTF-8')
-        
-        # Log model parameters
-        pytorch_total_params_G = sum(p.numel() for p in self.netG.parameters() if p.requires_grad)
-        pytorch_total_params_D = sum(p.numel() for p in self.netD.parameters() if p.requires_grad)
-        print("Total params in Generator:", pytorch_total_params_G)
-        print("Total params in Discriminator:", pytorch_total_params_D)
-
-        gradient_penalty = GradientPenalty(self.batch_size, self.lambda_gp, device=self.device)
-        loss = []
-
-        # Pour le calcul du throughput
-        import time
-        batch_times = []
-        
-        for epoch in range(self.starting_epoch, self.n_epochs):
-            epoch_start_time = time.time()
-            total_images = 0
-            epoch_g_loss = 0
-            epoch_d_loss = 0
-            num_batches = 0
-            
-            # Training phase
-            self.netG.train()
-            self.netD.train()
-            
-            for idx, (x, y, to_save) in enumerate(self.train_dl):
-                batch_start_time = time.time()
-                num_batches += 1
-                current_batch_size = self.batch_size
+        try:
+            # Setup directories and logging
+            if self.rank == 0:  # Seulement le processus principal crée les dossiers
+                os.makedirs("save", exist_ok=True)
+                os.makedirs("save/loss", exist_ok=True)
+                os.makedirs("save/checkpoints", exist_ok=True)
+                os.makedirs("images", exist_ok=True)
+                params_json = open("params.json", mode="w", encoding='UTF-8')
                 
-                # Move data to appropriate device
-                x = x.to(self.device, non_blocking=True)
-                y = y.to(self.device, non_blocking=True)
-                total_images += current_batch_size
+                # Log model parameters
+                pytorch_total_params_G = sum(p.numel() for p in self.netG.parameters() if p.requires_grad)
+                pytorch_total_params_D = sum(p.numel() for p in self.netD.parameters() if p.requires_grad)
+                print("Total params in Generator:", pytorch_total_params_G)
+                print("Total params in Discriminator:", pytorch_total_params_D)
 
-                ############## Train Discriminator ##############
-                self.OptimizerD.zero_grad(set_to_none=True)
+            gradient_penalty = GradientPenalty(self.batch_size, self.lambda_gp, device=self.device)
+            loss = []
+
+            # Pour le calcul du throughput
+            import time
+            batch_times = []
+            
+            for epoch in range(self.starting_epoch, self.n_epochs):
+                if self.world_size > 1:
+                    self.train_dl.sampler.set_epoch(epoch)
                 
-                with torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
-                    y_fake = self.netG(x)
-                    D_real = self.netD(x, y)
-                    D_fake = self.netD(x, y_fake.detach())
+                epoch_start_time = time.time()
+                total_images = 0
+                epoch_g_loss = 0
+                epoch_d_loss = 0
+                num_batches = 0
+                
+                # Training phase
+                self.netG.train()
+                self.netD.train()
+                
+                for idx, (x, y, to_save) in enumerate(self.train_dl):
+                    batch_start_time = time.time()
+                    num_batches += 1
+                    current_batch_size = x.size(0)
                     
-                    # Créer les labels avec la bonne dimension
-                    real_label = torch.ones_like(D_real, device=self.device)
-                    fake_label = torch.zeros_like(D_fake, device=self.device)
+                    # Move data to appropriate device
+                    x = x.to(self.device, non_blocking=True)
+                    y = y.to(self.device, non_blocking=True)
+                    total_images += current_batch_size
+
+                    ############## Train Discriminator ##############
+                    self.OptimizerD.zero_grad(set_to_none=True)
                     
-                    D_real_loss = self.BCE_Loss(D_real, real_label)
-                    D_fake_loss = self.BCE_Loss(D_fake, fake_label)
-                    D_loss = (D_fake_loss + D_real_loss) / 2
-                    gp = gradient_penalty(self.netD, y.detach(), y_fake.detach(), x)
-                    D_loss_W = D_loss + gp
- 
-                self.scaler.scale(D_loss_W).backward()
-                self.scaler.step(self.OptimizerD)
+                    with torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
+                        y_fake = self.netG(x)
+                        D_real = self.netD(x, y)
+                        D_fake = self.netD(x, y_fake.detach())
+                        
+                        real_label = torch.ones_like(D_real)
+                        fake_label = torch.zeros_like(D_fake)
+                        
+                        D_real_loss = self.BCE_Loss(D_real, real_label)
+                        D_fake_loss = self.BCE_Loss(D_fake, fake_label)
+                        D_loss = (D_fake_loss + D_real_loss) / 2
+                        gp = gradient_penalty(self.netD, y.detach(), y_fake.detach(), x)
+                        D_loss_W = D_loss + gp
+     
+                    self.scaler.scale(D_loss_W).backward()
+                    self.scaler.step(self.OptimizerD)
 
-                ############## Train Generator ##############
-                self.OptimizerG.zero_grad(set_to_none=True)
+                    ############## Train Generator ##############
+                    self.OptimizerG.zero_grad(set_to_none=True)
 
-                with torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
-                    D_fake = self.netD(x, y_fake)
-                    G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
-                    L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
-                    G_loss = G_fake_loss + L1
+                    with torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
+                        D_fake = self.netD(x, y_fake)
+                        G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
+                        L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
+                        G_loss = G_fake_loss + L1
 
-                self.scaler.scale(G_loss).backward()
-                self.scaler.step(self.OptimizerG)
-                self.scaler.update()
+                    self.scaler.scale(G_loss).backward()
+                    self.scaler.step(self.OptimizerG)
+                    self.scaler.update()
 
-                # Accumulate losses
-                epoch_d_loss += D_loss_W.item()
-                epoch_g_loss += G_loss.item()
+                    # Accumulate losses
+                    epoch_d_loss += D_loss_W.item()
+                    epoch_g_loss += G_loss.item()
 
-                # Calculate and log throughput
-                batch_end_time = time.time()
-                batch_time = batch_end_time - batch_start_time
-                batch_times.append(batch_time)
-                if len(batch_times) > 50:
-                    batch_times.pop(0)
-                avg_time = sum(batch_times) / len(batch_times)
-                images_per_sec = current_batch_size / avg_time
+                    # Calculate and log throughput
+                    batch_end_time = time.time()
+                    batch_time = batch_end_time - batch_start_time
+                    batch_times.append(batch_time)
+                    if len(batch_times) > 50:
+                        batch_times.pop(0)
+                    avg_time = sum(batch_times) / len(batch_times)
+                    images_per_sec = current_batch_size / avg_time
 
-                if idx % 10 == 0:  # Réduit la fréquence des logs
-                    print(
-                        "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [%.2f img/s]"
-                        % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), 
-                           D_loss_W.item(), G_loss.item(), images_per_sec))
-                    # Save images moins fréquemment
-                    if idx % 100 == 0:
-                        with torch.no_grad():
-                            with torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
-                                concatenated_images = torch.cat((x[:4], y_fake[:4], y[:4]), dim=2)  # Réduit le nombre d'images
-                            save_image(concatenated_images, f"images/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
+                    if self.rank == 0 and idx % 10 == 0:
+                        print(
+                            "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [%.2f img/s]"
+                            % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), 
+                               D_loss_W.item(), G_loss.item(), images_per_sec))
+                        
+                        if idx % 100 == 0:
+                            with torch.no_grad():
+                                with torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
+                                    concatenated_images = torch.cat((x[:4], y_fake[:4], y[:4]), dim=2)
+                                save_image(concatenated_images, f"images/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
 
-            # Calculate average epoch losses
-            avg_epoch_d_loss = epoch_d_loss / num_batches
-            avg_epoch_g_loss = epoch_g_loss / num_batches
+                # Synchronize losses across GPUs
+                if self.world_size > 1:
+                    dist.all_reduce(torch.tensor([epoch_d_loss, epoch_g_loss], device=self.device))
+                    epoch_d_loss /= self.world_size
+                    epoch_g_loss /= self.world_size
 
-            # Calculate epoch throughput
-            epoch_time = time.time() - epoch_start_time
-            epoch_throughput = total_images / epoch_time
-            print(f"Epoch {epoch+1} completed. Average throughput: {epoch_throughput:.2f} images/s")
+                if self.rank == 0:
+                    # Calculate average epoch losses
+                    avg_epoch_d_loss = epoch_d_loss / num_batches
+                    avg_epoch_g_loss = epoch_g_loss / num_batches
 
-            # Save loss history moins fréquemment
-            if epoch % 5 == 0:
-                loss_df = pd.DataFrame(loss, columns=["epoch", "batch", "loss_g", "loss_d"])
-                loss_df.to_csv("save/loss/loss.csv", mode="a", header=(epoch == 0))
+                    # Calculate epoch throughput
+                    epoch_time = time.time() - epoch_start_time
+                    epoch_throughput = total_images / epoch_time
+                    print(f"Epoch {epoch+1} completed. Average throughput: {epoch_throughput:.2f} images/s")
 
-            # Validation and model saving
-            print("-- Validation Test --")
-            self.validation()
-            val_loss = self.val_Gen_loss[-1] + self.val_Dis_loss[-1]
-            print(f"Epoch : {epoch+1}/{self.n_epochs} :")
-            print(f"Validation Discriminator Loss : {self.val_Dis_loss[-1]}")
-            print(f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
-            print("------------------------")
+                    if epoch % 5 == 0:
+                        loss_df = pd.DataFrame(loss, columns=["epoch", "batch", "loss_g", "loss_d"])
+                        loss_df.to_csv("save/loss/loss.csv", mode="a", header=(epoch == 0))
 
-            # Update learning rate schedulers
-            self.schedulerD.step(self.val_Dis_loss[-1])
-            self.schedulerG.step(self.val_Gen_loss[-1])
+                    # Validation and model saving
+                    print("-- Validation Test --")
+                    self.validation()
+                    val_loss = self.val_Gen_loss[-1] + self.val_Dis_loss[-1]
+                    print(f"Epoch : {epoch+1}/{self.n_epochs} :")
+                    print(f"Validation Discriminator Loss : {self.val_Dis_loss[-1]}")
+                    print(f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
+                    print("------------------------")
 
-            # Early stopping check
-            if val_loss < self.best_loss:
-                self.best_loss = val_loss
-                self.patience_counter = 0
-                if self.save_model_bool:
-                    save_model(
-                        {"gen": self.netG, "disc": self.netD},
-                        {"gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD},
-                        suffix=f"-best"
-                    )
-            else:
-                self.patience_counter += 1
+                    # Update learning rate schedulers
+                    self.schedulerD.step(self.val_Dis_loss[-1])
+                    self.schedulerG.step(self.val_Gen_loss[-1])
 
-            # Regular checkpoint saving (moins fréquent)
-            if epoch % 20 == 0 and self.save_model_bool:
+                    # Early stopping check
+                    if val_loss < self.best_loss:
+                        self.best_loss = val_loss
+                        self.patience_counter = 0
+                        if self.save_model_bool:
+                            save_model(
+                                {"gen": self.netG, "disc": self.netD},
+                                {"gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD},
+                                suffix=f"-best"
+                            )
+                    else:
+                        self.patience_counter += 1
+
+                    if epoch % 20 == 0 and self.save_model_bool:
+                        save_model(
+                            {"gen": self.netG, "disc": self.netD},
+                            {"gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD},
+                            suffix=f"-{epoch}"
+                        )
+                        save_results(params=self.M_CFG, metrics=dict(
+                            Gen_loss=avg_epoch_g_loss,
+                            Dis_loss=avg_epoch_d_loss,
+                            Val_Gen_loss=self.val_Gen_loss[-1],
+                            Val_Dis_loss=self.val_Dis_loss[-1]
+                        ))
+
+                    if self.patience_counter >= self.patience:
+                        print(f"Early stopping triggered after {epoch + 1} epochs")
+                        break
+
+            if self.rank == 0:
+                # Final save
                 save_model(
                     {"gen": self.netG, "disc": self.netD},
                     {"gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD},
-                    suffix=f"-{epoch}"
+                    suffix=f"-final"
                 )
                 save_results(params=self.M_CFG, metrics=dict(
                     Gen_loss=avg_epoch_g_loss,
@@ -362,27 +404,10 @@ class UCVGan():
                     Val_Gen_loss=self.val_Gen_loss[-1],
                     Val_Dis_loss=self.val_Dis_loss[-1]
                 ))
+                params_json.close()
 
-            # Early stopping
-            if self.patience_counter >= self.patience:
-                print(f"Early stopping triggered after {epoch + 1} epochs")
-                break
-
-        # Final save
-        save_model(
-            {"gen": self.netG, "disc": self.netD},
-            {"gen_opt": self.OptimizerG, "gen_disc": self.OptimizerD},
-            suffix=f"-final"
-        )
-        save_results(params=self.M_CFG, metrics=dict(
-            Gen_loss=avg_epoch_g_loss,
-            Dis_loss=avg_epoch_d_loss,
-            Val_Gen_loss=self.val_Gen_loss[-1],
-            Val_Dis_loss=self.val_Dis_loss[-1]
-        ))
-        params_json.close()
-
-        return
+        finally:
+            self.cleanup()
 
     # Test du modèle sur le set de validation
     def validation(self):

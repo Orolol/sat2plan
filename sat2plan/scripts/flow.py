@@ -134,7 +134,7 @@ def load_model(stage="Production") -> torch.nn.Module:
     if MODEL_TARGET == "local":
         print(Fore.BLUE + f"\nLoad latest model from local registry..." + Style.RESET_ALL)
 
-        local_model_directory = os.path.join(LOCAL_REGISTRY_PATH, "models")
+        local_model_directory = LOCAL_REGISTRY_PATH
         local_model_paths = glob.glob(f"{local_model_directory}/*")
 
         if not local_model_paths:

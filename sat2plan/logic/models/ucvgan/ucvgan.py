@@ -170,6 +170,11 @@ class UCVGan():
 
         # Setup distributed training if using CUDA
         if self.cuda and self.world_size > 1:
+            # Convert BatchNorm to SyncBatchNorm before DDP
+            self.netG = nn.SyncBatchNorm.convert_sync_batchnorm(self.netG)
+            self.netD = nn.SyncBatchNorm.convert_sync_batchnorm(self.netD)
+            
+            # Wrap models in DistributedDataParallel
             self.netG = nn.parallel.DistributedDataParallel(
                 self.netG, device_ids=[self.rank], output_device=self.rank)
             self.netD = nn.parallel.DistributedDataParallel(

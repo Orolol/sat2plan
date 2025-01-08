@@ -8,8 +8,8 @@ class CNN_Block(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride,
                       padding, bias=False, padding_mode="reflect"),
-            nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU(0.2)
+            nn.SyncBatchNorm(out_channels),
+            nn.LeakyReLU(0.2, inplace=True)
         )
 
     def forward(self, x):
@@ -26,15 +26,14 @@ class ConvBlock(nn.Module):
                       padding, bias=False, padding_mode="reflect")
             if down
             else nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU() if act == "relu" else nn.LeakyReLU(0.2),
+            nn.SyncBatchNorm(out_channels),
+            nn.ReLU(inplace=True) if act == "relu" else nn.LeakyReLU(0.2, inplace=True),
         )
         self.use_dropout = use_dropout
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
         x = self.conv(x)
-
         return self.dropout(x) if self.use_dropout else x
 
 
@@ -49,13 +48,13 @@ class UVCCNNlock(nn.Module):
             if down
             else nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding, bias=False),
             nn.InstanceNorm2d(out_channels),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(out_channels, out_channels, kernel_size, stride,
                       padding, bias=False, padding_mode="reflect")
             if down
             else nn.ConvTranspose2d(out_channels, out_channels, kernel_size, stride, padding, bias=False),
             nn.InstanceNorm2d(out_channels),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2, inplace=True),
         )
 
     def forward(self, x):

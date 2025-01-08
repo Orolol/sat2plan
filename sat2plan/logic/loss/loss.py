@@ -69,36 +69,38 @@ class StyleLoss(nn.Module):
 
 
 class GradientPenalty:
-    """Computes the gradient penalty as defined in "Improved Training of Wasserstein GANs"
-    (https://arxiv.org/abs/1704.00028)
-    Args:
-        batchSize (int): batch-size used in the training. Must be updated w.r.t the current batchsize
-        lambdaGP (float): coefficient of the gradient penalty as defined in the article
-        gamma (float): regularization term of the gradient penalty, augment to minimize "ghosts"
-    """
-
-    def __init__(self, batchSize, lambdaGP, gamma=1, device='cpu'):
-        self.batchSize = batchSize
-        self.lambdaGP = lambdaGP
-        self.gamma = gamma
+    def __init__(self, batch_size, lambda_gp, device='cuda'):
+        self.batch_size = batch_size
+        self.lambda_gp = lambda_gp
         self.device = device
 
-    def __call__(self, netD, real_data, fake_data, X):
-        alpha = torch.rand(self.batchSize, 1, 1, 1,
-                           requires_grad=True, device=self.device)
-        # randomly mix real and fake data
-        interpolates = real_data + alpha * (fake_data - real_data)
-        # compute output of D for interpolated input
+    def __call__(self, netD, real_samples, fake_samples, X):
+        """Calcule le gradient penalty"""
+        # Génère un nombre aléatoire pour chaque échantillon
+        alpha = torch.rand(real_samples.size(0), 1, 1, 1, device=self.device)
+        
+        # Crée des échantillons interpolés
+        interpolates = (alpha * real_samples + (1 - alpha) * fake_samples)
+        interpolates = interpolates.requires_grad_(True)
+        
+        # Calcule la sortie du discriminateur
         disc_interpolates = netD(X, interpolates)
-        # compute gradients w.r.t the interpolated outputs
-        gradients = grad(outputs=disc_interpolates, inputs=interpolates,
-                         grad_outputs=torch.ones(
-                             disc_interpolates.size(), device=self.device),
-                         create_graph=True, retain_graph=True, only_inputs=True)[0].view(self.batchSize, -1)
-        gradient_penalty = (
-            ((gradients.norm(2, dim=1) - self.gamma) / self.gamma) ** 2).mean() * self.lambdaGP
+        
+        # Calcule le gradient
+        gradients = torch.autograd.grad(
+            outputs=disc_interpolates,
+            inputs=interpolates,
+            grad_outputs=torch.ones_like(disc_interpolates, device=self.device),
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True
+        )[0]
 
-        return gradient_penalty
+        # Calcule la norme du gradient
+        gradients = gradients.view(gradients.size(0), -1)
+        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        
+        return gradient_penalty * self.lambda_gp
 
 
 """# Exemple d'utilisation :

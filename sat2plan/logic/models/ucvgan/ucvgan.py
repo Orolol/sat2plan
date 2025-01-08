@@ -8,6 +8,7 @@ from sat2plan.logic.configuration.config import Model_Configuration, Global_Conf
 from torch.autograd import Variable
 from torch import autograd
 import pandas as pd
+import datetime
 from sat2plan.logic.models.ucvgan.model_building import Generator, Discriminator
 from sat2plan.logic.loss.loss import GradientPenalty
 from sat2plan.scripts.flow import save_results, save_model, load_model

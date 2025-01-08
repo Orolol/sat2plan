@@ -47,7 +47,7 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, kernel_size=3, stride=1, padding=1, in_channels=3, features=96):
+    def __init__(self, kernel_size=3, stride=1, padding=1, in_channels=3, features=48):
         super().__init__()
         
         # Initial downsampling: (B, 3, 256, 256) -> (B, 48, 256, 256)
@@ -87,7 +87,7 @@ class Generator(nn.Module):
 
         # Bottleneck: (B, 384, 8, 8) -> (B, 384, 8, 8)
         self.bottleneck = PixelwiseViT(
-            features * 8, 8, 8, 768,  # Réduit encore la taille du bottleneck
+            features * 8, 8, 8, 1536,  # Réduit encore la taille du bottleneck
             features * 8,
             image_shape=(features * 8, 8, 8),
             rezero=True

@@ -1,4 +1,12 @@
 import os
+import tempfile
+
+# Create and set up temporary directory before any other imports
+temp_dir = os.path.join(os.getcwd(), 'tmp')
+os.makedirs(temp_dir, exist_ok=True)
+os.environ['TMPDIR'] = temp_dir
+tempfile.tempdir = temp_dir
+
 import torch
 import torch.nn as nn
 import torch.distributed as dist
@@ -13,9 +21,13 @@ from sat2plan.logic.models.ucvgan.model_building import Generator, Discriminator
 from sat2plan.logic.loss.loss import GradientPenalty
 from sat2plan.scripts.flow import save_results, save_model, load_model
 from sat2plan.logic.preproc.dataset import Satellite2Map_Data
+import shutil
 
 class UCVGan():
     def __init__(self, rank, world_size):
+        # Use the already created temporary directory
+        self.temp_dir = temp_dir
+        
         # Import des paramètres globaux
         self.G_CFG = Global_Configuration()
         self.n_cpu = self.G_CFG.n_cpu
@@ -98,6 +110,12 @@ class UCVGan():
     def cleanup(self):
         if self.cuda and self.world_size > 1:
             dist.destroy_process_group()
+        # Clean up temporary directory
+        if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
+            try:
+                shutil.rmtree(self.temp_dir)
+            except Exception as e:
+                print(f"Warning: Could not remove temporary directory: {e}")
 
     def __del__(self):
         self.cleanup()

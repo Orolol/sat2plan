@@ -3,6 +3,9 @@ import os
 import time
 import pickle
 import torch
+import shutil
+import json
+from datetime import datetime
 
 from typing import Dict
 
@@ -16,6 +19,17 @@ import mlflow
 from mlflow.tracking import MlflowClient
 
 LOCAL_REGISTRY_PATH = os.getcwd() + "/checkpoints"
+
+
+def check_disk_space(path, required_space_gb=5):
+    """Vérifie s'il y a assez d'espace disque"""
+    try:
+        total, used, free = shutil.disk_usage(path)
+        free_gb = free // (2**30)
+        return free_gb >= required_space_gb
+    except Exception as e:
+        print(f"Erreur lors de la vérification de l'espace disque: {e}")
+        return False
 
 
 def save_results(params: dict, metrics: dict) -> None:
@@ -46,47 +60,56 @@ def save_results(params: dict, metrics: dict) -> None:
 
 
 def save_model(models: Dict[str, torch.nn.Module] = None, optimizers: Dict[str, torch.optim.Optimizer] = None, suffix='') -> None:
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    model_path = os.path.join(
-        LOCAL_REGISTRY_PATH, "models", f"{timestamp}-{suffix}.pt")
-    print("=> Saving checkpoint")
+    """Sauvegarde les modèles et optimizers de façon sécurisée"""
+    save_dir = "save/checkpoints"
+    temp_dir = "save/checkpoints/temp"
+    
+    try:
+        # Vérifier l'espace disque
+        if not check_disk_space(save_dir):
+            print("Attention: Espace disque insuffisant pour la sauvegarde")
+            return False
 
-    state = {}
-    for name, model in models.items():
-        state[f"{name}_state_dict"] = model.state_dict()
-    for name, optimizer in optimizers.items():
-        state[f"{name}_optimizer_state_dict"] = optimizer.state_dict()
+        # Créer les répertoires nécessaires
+        os.makedirs(save_dir, exist_ok=True)
+        os.makedirs(temp_dir, exist_ok=True)
 
-    os.makedirs(os.path.join(
-        LOCAL_REGISTRY_PATH, "models"), exist_ok=True)
-    torch.save(state, model_path)
+        # Sauvegarder d'abord dans un fichier temporaire
+        temp_path = os.path.join(temp_dir, f"model{suffix}_temp.pt")
+        final_path = os.path.join(save_dir, f"model{suffix}.pt")
 
-    print("✅ Model saved locally")
+        # Préparer le dictionnaire de sauvegarde
+        save_dict = {
+            'gen_state_dict': models['gen'].module.state_dict() if hasattr(models['gen'], 'module') 
+                            else models['gen'].state_dict(),
+            'disc_state_dict': models['disc'].module.state_dict() if hasattr(models['disc'], 'module')
+                             else models['disc'].state_dict(),
+            'gen_opt_optimizer_state_dict': optimizers['gen_opt'].state_dict(),
+            'gen_disc_optimizer_state_dict': optimizers['gen_disc'].state_dict(),
+            'timestamp': datetime.now().isoformat()
+        }
 
-    if MODEL_TARGET == "gcs":
-        model_filename = model_path.split("/")[-1]
-        client = storage.Client()
-        bucket = client.bucket(BUCKET_NAME)
-        blob = bucket.blob(f"models/{model_filename}")
-        blob.upload_from_filename(model_path)
+        # Sauvegarder dans le fichier temporaire
+        torch.save(save_dict, temp_path)
 
-        print("✅ Model saved to GCS")
+        # Si la sauvegarde temporaire a réussi, déplacer vers l'emplacement final
+        if os.path.exists(temp_path):
+            shutil.move(temp_path, final_path)
+            print(f"Modèle sauvegardé avec succès: {final_path}")
+            return True
+        else:
+            print("Erreur: Le fichier temporaire n'a pas été créé")
+            return False
 
-        return None
-
-    if MODEL_TARGET == "mlflow":
-        for name, model in models.items():
-            mlflow.pytorch.log_model(
-                pytorch_model=model,
-                artifact_path="model",
-                registered_model_name=MLFLOW_MODEL_NAME + name
-            )
-
-        print("✅ Model saved to MLflow")
-
-        return None
-
-    return None
+    except Exception as e:
+        print(f"Erreur lors de la sauvegarde du modèle: {e}")
+        # Nettoyer les fichiers temporaires en cas d'erreur
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+        return False
 
 
 def load_pred_model() -> torch.nn.Module:

@@ -14,7 +14,7 @@ def ensure_data_downloaded():
     if not os.path.exists(f"data/split/train/{G_CFG.data_bucket}") or \
        not os.path.exists(f"data/split/val/{G_CFG.data_bucket}"):
         print("Downloading dataset...")
-        download_bucket_folder(G_CFG.data_bucket, val_size=0.2)
+        download_bucket_folder(G_CFG.data_bucket, val_size=0.05)
     else:
         print("Dataset already downloaded")
 

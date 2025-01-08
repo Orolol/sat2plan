@@ -18,7 +18,7 @@ from sat2plan.logic.configuration.config import Global_Configuration
 import mlflow
 from mlflow.tracking import MlflowClient
 
-LOCAL_REGISTRY_PATH = os.getcwd() + "/checkpoints"
+LOCAL_REGISTRY_PATH = os.getcwd() + "/save/checkpoints"
 
 
 def check_disk_space(path, required_space_gb=5):

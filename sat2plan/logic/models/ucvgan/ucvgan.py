@@ -160,10 +160,26 @@ class UCVGan():
 
         # Setup distributed training if using CUDA
         if self.cuda and self.world_size > 1:
+            # Configuration spécifique pour DDP
+            self.netG = nn.SyncBatchNorm.convert_sync_batchnorm(self.netG)
+            self.netD = nn.SyncBatchNorm.convert_sync_batchnorm(self.netD)
+            
+            find_unused_parameters = True  # Important pour éviter les erreurs de backward
+            
             self.netG = nn.parallel.DistributedDataParallel(
-                self.netG, device_ids=[self.rank], output_device=self.rank)
+                self.netG, 
+                device_ids=[self.rank],
+                output_device=self.rank,
+                find_unused_parameters=find_unused_parameters,
+                broadcast_buffers=False
+            )
             self.netD = nn.parallel.DistributedDataParallel(
-                self.netD, device_ids=[self.rank], output_device=self.rank)
+                self.netD,
+                device_ids=[self.rank],
+                output_device=self.rank,
+                find_unused_parameters=find_unused_parameters,
+                broadcast_buffers=False
+            )
             print(f"Models wrapped in DistributedDataParallel on GPU {self.rank}")
 
         # Initialize optimizers
@@ -194,7 +210,7 @@ class UCVGan():
                 self.starting_epoch = 0
 
         # Initialize losses and metrics tracking
-        self.scaler = torch.amp.GradScaler()  # For mixed precision training
+        self.scaler = torch.cuda.amp.GradScaler()  # For mixed precision training
         self.BCE_Loss = nn.BCEWithLogitsLoss()
         self.L1_Loss = nn.L1Loss()
         

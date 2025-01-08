@@ -416,7 +416,7 @@ class UCVGan():
                             save_model(
                                 models={'gen': self.netG, 'disc': self.netD},
                                 optimizers={'gen_opt': self.OptimizerG, 'gen_disc': self.OptimizerD},
-                                suffix="-best"
+                                suffix=f"-best-{epoch}"
                             )
                     else:
                         self.patience_counter += 1

@@ -1,82 +1,71 @@
 import os
-import torch
 from PIL import Image
-import numpy as np
-from torch.utils.data import Dataset, DataLoader
-from torchvision.utils import save_image
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
-
-
-############## Augmentations ###############
-
-both_transform = A.Compose(
-    [A.Resize(width=512, height=512), A.HorizontalFlip(p=0.5),], additional_targets={"image0": "image"},
-
-)
-transform_only_input = A.Compose(
-    [
-        A.ColorJitter(p=0.2),
-        A.Normalize(mean=[0.5, 0.5, 0.5], std=[
-                    0.5, 0.5, 0.5], max_pixel_value=255.0,),
-        ToTensorV2(),
-    ]
-)
-transform_only_mask = A.Compose(
-    [
-        A.Normalize(mean=[0.5, 0.5, 0.5], std=[
-                    0.5, 0.5, 0.5], max_pixel_value=255.0,),
-        ToTensorV2(),
-    ]
-)
-
-img_to_save = ['000363_Paris_48.88108_2.33803.png']
-
+import torch
+from torch.utils.data import Dataset
+import torchvision.transforms as transforms
+import random
 
 class Satellite2Map_Data(Dataset):
-    def __init__(self, root):
+    def __init__(self, root, image_size=256):
         self.root = root
-        list_files = os.listdir(self.root)
-        # Removing '.ipynb_checkpoints' from the list
-        # list_files.remove('.ipynb_checkpoints')
-        self.n_samples = list_files
+        self.image_size = image_size
+        self.list_files = os.listdir(self.root)
+        
+        # Transformations de base (redimensionnement et normalisation)
+        self.resize_transform = transforms.Resize((image_size, image_size), antialias=True)
+        self.to_tensor = transforms.ToTensor()
+        self.normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        
+        # Transformations spécifiques à l'image satellite
+        self.satellite_transform = transforms.Compose([
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+            transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.3)
+        ])
+
+    def apply_joint_transforms(self, satellite_img, map_img):
+        # Appliquer exactement les mêmes transformations aux deux images
+        if random.random() < 0.5:
+            satellite_img = transforms.functional.hflip(satellite_img)
+            map_img = transforms.functional.hflip(map_img)
+            
+        if random.random() < 0.5:
+            satellite_img = transforms.functional.vflip(satellite_img)
+            map_img = transforms.functional.vflip(map_img)
+            
+        if random.random() < 0.5:
+            angle = random.choice([90, 180, 270])
+            satellite_img = transforms.functional.rotate(satellite_img, angle)
+            map_img = transforms.functional.rotate(map_img, angle)
+            
+        return satellite_img, map_img
 
     def __len__(self):
-        return len(self.n_samples)
+        return len(self.list_files)
 
-    def __getitem__(self, idx):
-        try:
-            if torch.is_tensor(idx):
-                idx = idx.tolist()
-            image_name = self.n_samples[idx]
-            to_save = False
-            if image_name in img_to_save:
-                to_save = True
-            # print(self.n_samples)
-            image_path = os.path.join(self.root, image_name)
-            image = np.asarray(Image.open(image_path).convert('RGB'))
-            height, width, _ = image.shape
-            width_cutoff = width // 2
-            satellite_image = image[:, :width_cutoff, :]
-            map_image = image[:, width_cutoff:, :]
-            augmentations = both_transform(
-                image=satellite_image, image0=map_image)
-            input_image = augmentations["image"]
-            target_image = augmentations["image0"]
-            satellite_image = transform_only_input(image=input_image)["image"]
-            map_image = transform_only_mask(image=target_image)["image"]
-            # PIL_image = Image.fromarray(numpy_image.astype('uint8'), 'RGB')
-            # satellite_image = Image.fromarray(satellite_image.astype('uint8'),'RGB')
-            # map_image = Image.fromarray(map_image.astype('uint8'),'RGB')
-            # if self.transform!=None:
-            #     satellite_image = self.transform(satellite_image)
-            #     map_image = self.transform(map_image)
-            return (satellite_image, map_image, to_save)
-        except:
-            if torch.is_tensor(idx):
-                idx = idx.tolist()
-            image_name = self.n_samples[idx]
-            # print(self.n_samples)
-            image_path = os.path.join(self.root, image_name)
-            print(image_path)
-            pass
+    def __getitem__(self, index):
+        img_file = self.list_files[index]
+        img_path = os.path.join(self.root, img_file)
+        
+        # Charger l'image avec PIL
+        image = Image.open(img_path)
+        
+        # Séparer l'image en deux (satellite et plan)
+        w = image.width
+        satellite_img = image.crop((0, 0, w//2, image.height))
+        map_img = image.crop((w//2, 0, w, image.height))
+        
+        # Redimensionner les images
+        satellite_img = self.resize_transform(satellite_img)
+        map_img = self.resize_transform(map_img)
+        
+        # Appliquer les mêmes transformations aux deux images
+        satellite_img, map_img = self.apply_joint_transforms(satellite_img, map_img)
+        
+        # Appliquer les transformations spécifiques à l'image satellite
+        satellite_img = self.satellite_transform(satellite_img)
+        
+        # Convertir en tenseurs et normaliser
+        satellite_img = self.normalize(self.to_tensor(satellite_img))
+        map_img = self.normalize(self.to_tensor(map_img))
+        
+        return satellite_img, map_img, False

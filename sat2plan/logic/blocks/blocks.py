@@ -88,54 +88,58 @@ class UpsamplingBlock(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-
-    def __init__(
-        self, features, ffn_features, n_heads,
-        rezero=True, **kwargs
-    ):
+    def __init__(self, features, ffn_features, n_heads, rezero=True, dropout=0.1, **kwargs):
         super().__init__(**kwargs)
 
-        self.norm1 = nn.LayerNorm(features)
-        self.atten = nn.MultiheadAttention(features, n_heads)
+        self.norm1 = nn.LayerNorm(features, eps=1e-5)
+        
+        self.atten = nn.MultiheadAttention(
+            features, 
+            n_heads, 
+            dropout=dropout, 
+            batch_first=True
+        )
+        self.dropout1 = nn.Dropout(dropout)
 
-        self.norm2 = nn.LayerNorm(features)
-        self.ffn = PositionWise(features, ffn_features)
+        self.norm2 = nn.LayerNorm(features, eps=1e-5)
+        self.ffn = PositionWise(features, ffn_features, dropout=dropout)
+        self.dropout2 = nn.Dropout(dropout)
 
         self.rezero = rezero
-
         if rezero:
-            self.re_alpha = nn.Parameter(torch.zeros((1, )))
+            self.re_alpha = nn.Parameter(torch.zeros(1))
         else:
             self.re_alpha = 1
 
     def forward(self, x):
-        # Step 1: Multi-Head Self Attention
-        y1 = self.norm1(x)
-        y1, _atten_weights = self.atten(y1, y1, y1)
+        residual = x
+        
+        y = self.norm1(x)
+        y, _ = self.atten(y, y, y)
+        y = self.dropout1(y)
+        x = residual + (y * self.re_alpha if self.rezero else y)
 
-        y = x + self.re_alpha * y1
+        residual = x
+        y = self.norm2(x)
+        y = self.ffn(y)
+        y = self.dropout2(y)
+        x = residual + (y * self.re_alpha if self.rezero else y)
 
-        # Step 2: PositionWise Feed Forward Network
-        y2 = self.norm2(y)
-        y2 = self.ffn(y2)
-
-        y = y + self.re_alpha * y2
-
-        return y
+        return x
 
     def extra_repr(self):
         return 're_alpha = %e' % (self.re_alpha, )
 
 
 class PositionWise(nn.Module):
-
-    def __init__(self, features, ffn_features, **kwargs):
+    def __init__(self, features, ffn_features, dropout=0.1, **kwargs):
         super().__init__(**kwargs)
 
         self.net = nn.Sequential(
-            nn.Linear(features, ffn_features),
+            nn.Linear(features, ffn_features, bias=False),
             nn.GELU(),
-            nn.Linear(ffn_features, features),
+            nn.Dropout(dropout),
+            nn.Linear(ffn_features, features, bias=False)
         )
 
     def forward(self, x):
@@ -223,49 +227,37 @@ class ViTInput(nn.Module):
 
 
 class PixelwiseViT(nn.Module):
-
-    def __init__(
-        self, features, n_heads, n_blocks, ffn_features, embed_features, image_shape, rezero=True, **kwargs
-    ):
+    def __init__(self, features, n_heads, n_blocks, ffn_features, embed_features, 
+                 image_shape, rezero=True, dropout=0.1, **kwargs):
         super().__init__(**kwargs)
-        #     ffn_features, embed_features, image_shape)
         self.image_shape = image_shape
 
+        self.seq_length = image_shape[1] * image_shape[2]
+        
         self.trans_input = ViTInput(
             image_shape[0], embed_features, features,
-            image_shape[1], image_shape[2],
+            image_shape[1], image_shape[2]
         )
 
-        self.encoder = TransformerEncoder(
-            features, ffn_features, n_heads, n_blocks, rezero
-        )
-        self.trans_output = nn.Linear(features, image_shape[0])
+        self.encoder = nn.ModuleList([
+            TransformerBlock(
+                features, ffn_features, n_heads, rezero, dropout
+            ) for _ in range(n_blocks)
+        ])
+        
+        self.trans_output = nn.Linear(features, image_shape[0], bias=False)
 
     def forward(self, x):
-        # itokens : (N, C, H * W)
-        itokens = x.view(*x.shape[:2], -1)
-
-        # itokens : (N, C,     H * W)
-        #        -> (N, H * W, C    )
-        #         = (N, L,     C)
-        itokens = itokens.permute((0, 2, 1))
-
-        # y : (N, L, features)
+        batch_size = x.shape[0]
+        itokens = x.reshape(batch_size, x.shape[1], -1).transpose(1, 2)
+        
         y = self.trans_input(itokens)
-        y = self.encoder(y)
-
-        # otokens : (N, L, C)
+        
+        for block in self.encoder:
+            y = block(y)
+            
         otokens = self.trans_output(y)
-
-        # otokens : (N, L, C)
-        #        -> (N, C, L)
-        #         = (N, C, H * W)
-        otokens = otokens.permute((0, 2, 1))
-
-        # result : (N, C, H, W)
-        result = otokens.view(*otokens.shape[:2], *self.image_shape[1:])
-
-        return result
+        return otokens.transpose(1, 2).reshape(batch_size, -1, *self.image_shape[1:])
 
 
 def calc_tokenized_size(image_shape, token_size):

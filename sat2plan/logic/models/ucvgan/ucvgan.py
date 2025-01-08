@@ -357,9 +357,10 @@ class UCVGan():
 
                     if self.rank == 0 and idx % 10 == 0:
                         print(
-                            "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [%.2f img/s]"
+                            "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [%.2f img/s] [lr D: %f] [lr G: %f]"
                             % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), 
-                               D_loss_W.item(), G_loss.item(), images_per_sec))
+                               D_loss_W.item(), G_loss.item(), images_per_sec,
+                               self.OptimizerD.param_groups[0]['lr'], self.OptimizerG.param_groups[0]['lr']))
                         
                         if idx % 100 == 0:
                             with torch.no_grad():

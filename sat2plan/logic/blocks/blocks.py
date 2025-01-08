@@ -5,68 +5,61 @@ import torch.nn as nn
 class CNN_Block(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1):
         super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels, 
-            out_channels, 
-            kernel_size, 
-            stride,
-            padding, 
-            bias=False, 
-            padding_mode="reflect"
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride,
+                      padding, bias=False, padding_mode="reflect"),
+            nn.BatchNorm2d(out_channels),
+            nn.LeakyReLU(0.2)
         )
-        self.bn = nn.BatchNorm2d(out_channels, eps=1e-5, momentum=0.1, track_running_stats=True)
-        self.act = nn.LeakyReLU(0.2, inplace=False)
 
     def forward(self, x):
-        x = self.conv(x)
-        x = self.bn(x)
-        x = self.act(x)
-        return x
+        return self.conv(x)
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1, down=True, act="relu", use_dropout=False):
+    def __init__(self, in_channels, out_channels,  kernel_size=4, stride=2, padding=1, down=True, act="relu", use_dropout=False):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride,
-                    padding, bias=False, padding_mode="reflect") if down \
-                    else nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
-        self.bn = nn.BatchNorm2d(out_channels, track_running_stats=True)
-        self.act = nn.ReLU(inplace=False) if act == "relu" else nn.LeakyReLU(0.2, inplace=False)
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride,
+                      padding, bias=False, padding_mode="reflect")
+            if down
+            else nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU() if act == "relu" else nn.LeakyReLU(0.2),
+        )
         self.use_dropout = use_dropout
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.bn(x)
-        x = self.act(x)
-        if self.use_dropout:
-            x = self.dropout(x)
-        return x
+
+        return self.dropout(x) if self.use_dropout else x
 
 
 class UVCCNNlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, down=True):
+    def __init__(self, in_channels, out_channels,  kernel_size=3, stride=1, padding=1, down=True):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size, stride,
-                    padding, bias=False, padding_mode="reflect") if down \
-                    else nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
-        self.norm1 = nn.InstanceNorm2d(out_channels)
-        self.act1 = nn.LeakyReLU(0.2, inplace=False)
-        
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size, stride,
-                    padding, bias=False, padding_mode="reflect") if down \
-                    else nn.ConvTranspose2d(out_channels, out_channels, kernel_size, stride, padding, bias=False)
-        self.norm2 = nn.InstanceNorm2d(out_channels)
-        self.act2 = nn.LeakyReLU(0.2, inplace=False)
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride,
+                      padding, bias=False, padding_mode="reflect")
+            if down
+            else nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding, bias=False),
+            nn.InstanceNorm2d(out_channels),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(out_channels, out_channels, kernel_size, stride,
+                      padding, bias=False, padding_mode="reflect")
+            if down
+            else nn.ConvTranspose2d(out_channels, out_channels, kernel_size, stride, padding, bias=False),
+            nn.InstanceNorm2d(out_channels),
+            nn.LeakyReLU(0.2),
+        )
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.norm1(x)
-        x = self.act1(x)
-        x = self.conv2(x)
-        x = self.norm2(x)
-        x = self.act2(x)
-        return x
+        return self.conv(x)
 
 
 class DownsamplingBlock(nn.Module):

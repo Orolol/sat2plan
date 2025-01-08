@@ -15,51 +15,46 @@ from sat2plan.logic.preproc.dataset import Satellite2Map_Data
 
 class UCVGan():
     def __init__(self, rank, world_size):
-        try:
-            # Import des paramètres globaux
-            self.G_CFG = Global_Configuration()
-            self.n_cpu = self.G_CFG.n_cpu
-            self.rank = rank
-            self.world_size = world_size
-            self.train_dir = f"{self.G_CFG.train_dir}/{self.G_CFG.data_bucket}"
-            self.val_dir = f"{self.G_CFG.val_dir}/{self.G_CFG.data_bucket}"
-            self.image_size = self.G_CFG.image_size
-            self.batch_size = self.G_CFG.batch_size
-            self.n_epochs = self.G_CFG.n_epochs
-            self.sample_interval = self.G_CFG.sample_interval
-            self.num_workers = self.G_CFG.num_workers
-            self.l1_lambda = self.G_CFG.l1_lambda
-            self.lambda_gp = self.G_CFG.lambda_gp
-            self.load_model = self.G_CFG.load_model
-            self.save_model_bool = self.G_CFG.save_model
-            self.checkpoint_disc = self.G_CFG.checkpoint_disc
-            self.checkpoint_gen = self.G_CFG.checkpoint_gen
+        # Import des paramètres globaux
+        self.G_CFG = Global_Configuration()
+        self.n_cpu = self.G_CFG.n_cpu
+        self.rank = rank
+        self.world_size = world_size
+        self.train_dir = f"{self.G_CFG.train_dir}/{self.G_CFG.data_bucket}"
+        self.val_dir = f"{self.G_CFG.val_dir}/{self.G_CFG.data_bucket}"
+        self.image_size = self.G_CFG.image_size
+        self.batch_size = self.G_CFG.batch_size
+        self.n_epochs = self.G_CFG.n_epochs
+        self.sample_interval = self.G_CFG.sample_interval
+        self.num_workers = self.G_CFG.num_workers
+        self.l1_lambda = self.G_CFG.l1_lambda
+        self.lambda_gp = self.G_CFG.lambda_gp
+        self.load_model = self.G_CFG.load_model
+        self.save_model_bool = self.G_CFG.save_model
+        self.checkpoint_disc = self.G_CFG.checkpoint_disc
+        self.checkpoint_gen = self.G_CFG.checkpoint_gen
 
-            # Import des hyperparamètres du modèle
-            self.M_CFG = Model_Configuration()
-            self.learning_rate_D = self.M_CFG.learning_rate_D
-            self.learning_rate_G = self.M_CFG.learning_rate_G
-            self.beta1 = self.M_CFG.beta1
-            self.beta2 = self.M_CFG.beta2
+        # Import des hyperparamètres du modèle
+        self.M_CFG = Model_Configuration()
+        self.learning_rate_D = self.M_CFG.learning_rate_D
+        self.learning_rate_G = self.M_CFG.learning_rate_G
+        self.beta1 = self.M_CFG.beta1
+        self.beta2 = self.M_CFG.beta2
 
-            # Setup device
-            self.setup_device()
+        # Setup device
+        self.setup_device()
 
-            # Loading Data
-            self.dataloading()
+        # Loading Data
+        self.dataloading()
 
-            # Création des models, optimizers, losses
-            self.create_models()
+        # Création des models, optimizers, losses
+        self.create_models()
 
-            # If True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest
-            if self.cuda:
-                torch.backends.cudnn.benchmark = True
+        # If True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest
+        if self.cuda:
+            torch.backends.cudnn.benchmark = True
 
-            self.train()
-        finally:
-            # Nettoyage à la fin
-            if self.cuda and dist.is_initialized():
-                dist.destroy_process_group()
+        self.train()
 
     def setup_device(self):
         self.cuda = torch.cuda.is_available()
@@ -160,36 +155,17 @@ class UCVGan():
 
         # Setup distributed training if using CUDA
         if self.cuda and self.world_size > 1:
-            # Configuration spécifique pour DDP
-            find_unused_parameters = False  # Désactivé car pas nécessaire
-            
             self.netG = nn.parallel.DistributedDataParallel(
-                self.netG, 
-                device_ids=[self.rank],
-                output_device=self.rank,
-                find_unused_parameters=find_unused_parameters,
-                broadcast_buffers=True
-            )
+                self.netG, device_ids=[self.rank], output_device=self.rank)
             self.netD = nn.parallel.DistributedDataParallel(
-                self.netD,
-                device_ids=[self.rank],
-                output_device=self.rank,
-                find_unused_parameters=find_unused_parameters,
-                broadcast_buffers=True
-            )
+                self.netD, device_ids=[self.rank], output_device=self.rank)
             print(f"Models wrapped in DistributedDataParallel on GPU {self.rank}")
 
-        # Initialize optimizers with gradient clipping
+        # Initialize optimizers
         self.OptimizerD = torch.optim.Adam(
-            self.netD.parameters(), 
-            lr=self.learning_rate_D, 
-            betas=(self.beta1, self.beta2)
-        )
+            self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
-            self.netG.parameters(), 
-            lr=self.learning_rate_G, 
-            betas=(self.beta1, self.beta2)
-        )
+            self.netG.parameters(), lr=self.learning_rate_G, betas=(self.beta1, self.beta2))
 
         # Initialize learning rate schedulers
         self.schedulerD = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -213,7 +189,7 @@ class UCVGan():
                 self.starting_epoch = 0
 
         # Initialize losses and metrics tracking
-        self.scaler = torch.cuda.amp.GradScaler()  # For mixed precision training
+        self.scaler = torch.amp.GradScaler()  # For mixed precision training
         self.BCE_Loss = nn.BCEWithLogitsLoss()
         self.L1_Loss = nn.L1Loss()
         
@@ -239,9 +215,6 @@ class UCVGan():
         os.makedirs("save/loss", exist_ok=True)
         os.makedirs("save/checkpoints", exist_ok=True)
         params_json = open("params.json", mode="w", encoding='UTF-8')
-        
-        # Activer la détection d'anomalies en mode debug
-        torch.autograd.set_detect_anomaly(True)
         
         # Log model parameters
         pytorch_total_params_G = sum(p.numel() for p in self.netG.parameters() if p.requires_grad)
@@ -270,7 +243,7 @@ class UCVGan():
             for idx, (x, y, to_save) in enumerate(self.train_dl):
                 batch_start_time = time.time()
                 num_batches += 1
-                current_batch_size = x.size(0)
+                current_batch_size = self.batch_size
                 
                 # Move data to appropriate device
                 x = x.to(self.device, non_blocking=True)
@@ -291,10 +264,10 @@ class UCVGan():
                     
                     D_real_loss = self.BCE_Loss(D_real, real_label)
                     D_fake_loss = self.BCE_Loss(D_fake, fake_label)
-                    D_loss = (D_fake_loss + D_real_loss) * 0.5  # Éviter l'opération in-place
+                    D_loss = (D_fake_loss + D_real_loss) / 2
                     gp = gradient_penalty(self.netD, y.detach(), y_fake.detach(), x)
                     D_loss_W = D_loss + gp
-
+ 
                 self.scaler.scale(D_loss_W).backward()
                 self.scaler.step(self.OptimizerD)
 
@@ -310,10 +283,6 @@ class UCVGan():
                 self.scaler.scale(G_loss).backward()
                 self.scaler.step(self.OptimizerG)
                 self.scaler.update()
-
-                # Libérer la mémoire explicitement
-                del y_fake, D_real, D_fake, D_loss_W, G_loss, L1
-                torch.cuda.empty_cache()
 
                 # Accumulate losses
                 epoch_d_loss += D_loss_W.item()

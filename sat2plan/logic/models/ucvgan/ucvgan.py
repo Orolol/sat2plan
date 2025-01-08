@@ -3,6 +3,10 @@ import os
 
 import torch
 import torch.nn as nn
+import torch.distributed as dist
+import torch_xla
+import torch_xla.core.xla_model as xm
+
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
@@ -24,16 +28,18 @@ from sat2plan.logic.preproc.dataset import Satellite2Map_Data
 
 
 class UCVGan():
-    def __init__(self, data_bucket='data-1k'):
+    def __init__(self, rank, world_size):
 
         # Import des paramètres globaux
         self.G_CFG = Global_Configuration()
 
         self.n_cpu = self.G_CFG.n_cpu
+        self.rank = rank
+        self.world_size = world_size
 
         self.device = self.G_CFG.device
-        self.train_dir = f"{self.G_CFG.train_dir}/{data_bucket}"
-        self.val_dir = f"{self.G_CFG.val_dir}/{data_bucket}"
+        self.train_dir = f"{self.G_CFG.train_dir}/{self.G_CFG.data_bucket}"
+        self.val_dir = f"{self.G_CFG.val_dir}/{self.G_CFG.data_bucket}"
 
         self.image_size = self.G_CFG.image_size
 
@@ -68,6 +74,8 @@ class UCVGan():
         # If True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest
         torch.backends.cudnn.benchmark = True
 
+        self.train()
+
     # Load datasets from train/val directories
     def dataloading(self):
 
@@ -86,63 +94,49 @@ class UCVGan():
 
         return
 
-    def calculate_gradient_penalty(self, real_images, fake_images, source_image):
-        eta = torch.FloatTensor(self.batch_size, 1, 1, 1).uniform_(0, 1)
-        eta = eta.expand(self.batch_size, real_images.size(
-            1), real_images.size(2), real_images.size(3))
-        if self.cuda:
-            eta = eta.cuda()
-        else:
-            eta = eta
-
-        interpolated = eta * real_images + ((1 - eta) * fake_images)
-
-        if self.cuda:
-            interpolated = interpolated.cuda()
-        else:
-            interpolated = interpolated
-
-        # define it to calculate gradient
-        interpolated = Variable(interpolated, requires_grad=True)
-
-        # calculate probability of interpolated examples
-        prob_interpolated = self.netD(source_image, interpolated)
-
-        # calculate gradients of probabilities with respect to examples
-        gradients = autograd.grad(outputs=prob_interpolated, inputs=interpolated,
-                                  grad_outputs=torch.ones(
-                                      prob_interpolated.size()).cuda() if self.cuda else torch.ones(
-                                      prob_interpolated.size()),
-                                  create_graph=True, retain_graph=True)[0]
-
-        # flatten the gradients to it calculates norm batchwise
-        gradients = gradients.view(gradients.size(0), -1)
-
-        grad_penalty = ((gradients.norm(2, dim=1))
-                        ** 2).mean() * self.lambda_gp
-        return grad_penalty
-
     # Create models, optimizers ans losses
 
     def create_models(self):
+        # Check Cuda
+        self.cuda = True if torch.cuda.is_available() else False
+        self.tpu = True if xm.xla_device() else False
+        self.netD = Discriminator(in_channels=3).to(self.device)
+        self.netG = Generator(in_channels=3).to(self.device)
+        if self.cuda:
+            print("Cuda is available")
+            # self.device = torch.device('cuda')
+            print("Available GPU :", torch.cuda.device_count())
+            print("Rank :", self.rank)
+            self.device = self.rank
+            os.environ['MASTER_ADDR'] = 'localhost'
+            os.environ['MASTER_PORT'] = '12355'
+            dist.init_process_group(
+                "gloo", rank=self.rank, world_size=self.world_size)
+            # self.netD = nn.parallel.DistributedDataParallel(
+            #     self.netD, device_ids=[self.rank], output_device=self.rank)
+            self.netG = nn.parallel.DistributedDataParallel(
+                self.netG, device_ids=[self.rank], output_device=self.rank)
 
-        self.netD = Discriminator(in_channels=3)
-        self.netG = Generator(in_channels=3)
+        elif self.tpu:
+            print("TPU is available")
+            print("Rank :", self.rank)
+            self.device = xm.xla_device(n=self.rank, devkind='TPU')
+            self.netD = self.netD.to(self.device)
+            self.netG = self.netG.to(self.device)
+
+        else:
+            self.device = torch.device(
+                "cuda" if torch.cuda.is_available() else "cpu")
+
         self.starting_epoch = 0
+
+        torch.autograd.set_detect_anomaly(True)
 
         if self.load_model:
             model_and_optimizer, epoch = load_model()
             self.netG.load_state_dict(model_and_optimizer['gen_state_dict'])
             self.netD.load_state_dict(model_and_optimizer['disc_state_dict'])
             self.starting_epoch = epoch
-
-        # Check Cuda
-        self.cuda = True if torch.cuda.is_available() else False
-        if self.cuda:
-            print("Cuda is available")
-            self.netD = self.netD.cuda()
-            self.netG = self.netG.cuda()
-
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
@@ -188,8 +182,8 @@ class UCVGan():
             for idx, (x, y, to_save) in enumerate(self.train_dl):
 
                 if self.cuda:
-                    x = x .cuda()
-                    y = y.cuda()
+                    x = x .to(self.device)
+                    y = y.to(self.device)
 
                 self.OptimizerD.zero_grad()
                 self.OptimizerG.zero_grad()
@@ -308,8 +302,8 @@ class UCVGan():
             ############## Discriminator ##############
 
             if self.cuda:
-                x = x .cuda()
-                y = y.cuda()
+                x = x .to(self.device)
+                y = y.to(self.device)
 
             # Measure discriminator's ability to classify real from generated samples
             y_fake = self.netG(x)

@@ -47,25 +47,25 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self,  kernel_size=3, stride=1, padding=1, in_channels=3, features=64):
+    def __init__(self,  kernel_size=3, stride=1, padding=1, in_channels=3, features=48):
         super().__init__()
         self.initial_down = nn.Sequential(
             nn.Conv2d(in_channels, features, kernel_size,
                       stride, padding, padding_mode="reflect"),
             nn.LeakyReLU(0.2)
-        )  # 256 X 256
+        )  # 512 X 512
 
         ##############################################################################
         ################################## ENCODEUR ##################################
         ##############################################################################
 
-        self.down1 = UVCCNNlock(features, features*2, down=True)    # 64 X 64
+        self.down1 = UVCCNNlock(features, features*2, down=True)    # 256 X 256
         self.dscale1 = DownsamplingBlock(features*2, features*2)
-        self.down2 = UVCCNNlock(features*2, features*4, down=True)  # 32 X 32
+        self.down2 = UVCCNNlock(features*2, features*4, down=True)  # 128 X 128
         self.dscale2 = DownsamplingBlock(features*4, features*4)
-        self.down3 = UVCCNNlock(features*4, features*8, down=True)  # 16 X 16
+        self.down3 = UVCCNNlock(features*4, features*8, down=True)  # 64 X 64
         self.dscale3 = DownsamplingBlock(features*8, features*8)
-        self.down4 = UVCCNNlock(features*8, features*8, down=True)  # 16 X 16
+        self.down4 = UVCCNNlock(features*8, features*8, down=True)  # 32 X 32
         self.dscale4 = DownsamplingBlock(features*8, features*8)
         self.down5 = UVCCNNlock(features*8, features*8, down=True)  # 16 X 16
         self.dscale5 = DownsamplingBlock(features*8, features*8)
@@ -75,7 +75,7 @@ class Generator(nn.Module):
         ##############################################################################
 
         self.bottleneck = PixelwiseViT(
-            features * 8, 8, 8, 1536, features * 8,
+            features * 8, 8, 12, 1024, features * 8,
             image_shape=(features * 8, 16, 16),
             rezero=True
         )
@@ -87,13 +87,15 @@ class Generator(nn.Module):
         self.uscale3 = UpsamplingBlock(features*16, features*16)
         self.up3 = UVCCNNlock(features*16, features*8, down=False)   # 16 * 16
         self.uscale4 = UpsamplingBlock(features*16, features*16)
-        self.up4 = UVCCNNlock(features*16, features*8, down=False)   # 16 * 16
+        self.up4 = UVCCNNlock(features*16, features*8, down=False)   # 32 * 32
         self.uscale5 = UpsamplingBlock(features*16, features*16)
-        self.up5 = UVCCNNlock(features*16, features*8, down=False)
+        self.up5 = UVCCNNlock(features*16, features*8, down=False)   # 64 * 64
         self.uscale6 = UpsamplingBlock(features*12, features*12)
-        self.up6 = UVCCNNlock(features*12, features*4, down=False)
+        self.up6 = UVCCNNlock(features*12, features*4,
+                              down=False)   # 128 * 128
         self.uscale7 = UpsamplingBlock(features*6, features*6)
-        self.up7 = UVCCNNlock(features*6, features*2, down=False)
+        self.up7 = UVCCNNlock(features*6, features*2,
+                              down=False)    # 256 * 256
 
         self.final_up = nn.Sequential(
             nn.ConvTranspose2d(features * 2, in_channels,

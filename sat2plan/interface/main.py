@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 import torch
 from torchvision.utils import save_image
+import torch.multiprocessing as mp
+import torch_xla
+import torch_xla.core.xla_model as xm
 
 from pathlib import Path
 from colorama import Fore, Style
@@ -39,17 +42,32 @@ def train_unet():
 
 
 def train_ucvgan():
-
-    data_bucket = 'data-1k'
-    # export_params_txt()
-
     print(Fore.YELLOW + "Training UCVGan" + Style.RESET_ALL)
-    download_bucket_folder(data_bucket, val_size=0.05)
+    data_bucket = 'data-1k'
+    download_bucket_folder(data_bucket, val_size=0.1)
+    cuda = torch.cuda.is_available()
+    tpu = xm.xla_device()
 
-    print("Running unet training")
-    # train_model(data_bucket=data_bucket)
-    ucvgan = UCVGan(data_bucket=data_bucket)
-    ucvgan.train()
+    if cuda:
+        print(f"Using CUDA with {torch.cuda.device_count()} devices")
+        world_size = np.max([(torch.cuda.device_count(), 1)])
+        mp.spawn(UCVGan,
+                 args=(world_size,),
+                 nprocs=world_size,
+                 join=True)
+    elif tpu:
+        print(f"Using TPU with 8 devices")
+        world_size = 8
+        mp.spawn(UCVGan,
+                 args=(world_size,),
+                 nprocs=world_size,
+                 join=True)
+    else:
+        print("No GPU/TPU available, using CPU")
+        mp.spawn(UCVGan,
+                 args=(1,),
+                 nprocs=1,
+                 join=True)
 
 
 def train_sam_gan():

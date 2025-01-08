@@ -144,7 +144,13 @@ def load_model(stage="Production") -> torch.nn.Module:
 
         print(Fore.BLUE + f"\nLoad latest model from disk..." + Style.RESET_ALL)
         print(f"Most recent model path: {most_recent_model_path_on_disk}")
-        epoch = int(most_recent_model_path_on_disk.split("/")[-1].split("-")[-2])
+        
+        # Try to get epoch from filename, default to 0 if not found
+        try:
+            epoch = int(most_recent_model_path_on_disk.split("/")[-1].split("-")[-2])
+        except (ValueError, IndexError):
+            epoch = 0
+            
         model = torch.load(most_recent_model_path_on_disk)
 
         print("✅ Model loaded from local disk")

@@ -41,7 +41,7 @@ class Global_Configuration:
         self.channels_img = 3
 
         self.num_workers = 2
-        self.l1_lambda = 100
+        self.l1_lambda = 10
         self.lambda_gp = 10
 
         self.load_model = True

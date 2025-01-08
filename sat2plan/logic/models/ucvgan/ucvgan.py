@@ -421,7 +421,7 @@ class UCVGan():
                     else:
                         self.patience_counter += 1
 
-                    if epoch % 20 == 0 and self.save_model_bool:
+                    if epoch % 10 == 0 and self.save_model_bool:
                         save_model(
                             models={'gen': self.netG, 'disc': self.netD},
                             optimizers={'gen_opt': self.OptimizerG, 'gen_disc': self.OptimizerD},

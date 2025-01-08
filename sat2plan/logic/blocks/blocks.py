@@ -5,15 +5,24 @@ import torch.nn as nn
 class CNN_Block(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1):
         super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size, stride,
-                      padding, bias=False, padding_mode="reflect"),
-            nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU(0.2)
+        self.conv = nn.Conv2d(
+            in_channels, 
+            out_channels, 
+            kernel_size, 
+            stride,
+            padding, 
+            bias=False, 
+            padding_mode="reflect"
         )
+        self.bn = nn.BatchNorm2d(out_channels, eps=1e-5, momentum=0.1)
+        self.act = nn.LeakyReLU(0.2, inplace=True)
 
     def forward(self, x):
-        return self.conv(x)
+        x = self.conv(x)
+        if x.requires_grad:
+            x = self.bn(x)
+        x = self.act(x)
+        return x
 
 
 class ConvBlock(nn.Module):

@@ -362,7 +362,7 @@ class UCVGan():
                                D_loss_W.item(), G_loss.item(), images_per_sec,
                                self.OptimizerD.param_groups[0]['lr'], self.OptimizerG.param_groups[0]['lr']))
                         
-                        if idx % 100 == 0:
+                        if idx % 10 == 0:
                             with torch.no_grad():
                                 with torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
                                     concatenated_images = torch.cat((x[:4], y_fake[:4], y[:4]), dim=2)

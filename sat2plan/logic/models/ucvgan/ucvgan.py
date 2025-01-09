@@ -41,8 +41,8 @@ class UCVGan():
             self.n_epochs = self.G_CFG.n_epochs
             self.sample_interval = self.G_CFG.sample_interval
             self.num_workers = self.G_CFG.num_workers
-            self.l1_lambda = 10.0  # Réduit de 100 à 10
-            self.lambda_gp = 0.1  # Réduit de 10 à 0.1
+            self.l1_lambda = 100.0  # Augmenté pour donner plus d'importance à la reconstruction
+            self.lambda_gp = 10.0  # Augmenté pour une meilleure régularisation
             self.load_model = self.G_CFG.load_model
             self.save_model_bool = self.G_CFG.save_model
             self.checkpoint_disc = self.G_CFG.checkpoint_disc
@@ -210,6 +210,12 @@ class UCVGan():
         self.netD = Discriminator(in_channels=3).to(self.device)
         self.netG = Generator(in_channels=3).to(self.device)
         self.starting_epoch = 0
+        
+        # Paramètres d'équilibrage
+        self.n_critic = 5  # Nombre d'itérations du générateur pour une du discriminateur
+        self.l1_lambda = 100.0  # Augmenté pour donner plus d'importance à la reconstruction
+        self.lambda_gp = 10.0  # Augmenté pour une meilleure régularisation
+        self.g_factor = 0.1  # Facteur pour la perte adversariale du générateur
 
         # Setup distributed training if using CUDA
         if self.cuda and self.world_size > 1:
@@ -226,7 +232,7 @@ class UCVGan():
 
         # Initialize optimizers with full learning rate
         self.OptimizerD = torch.optim.Adam(
-            self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))
+            self.netD.parameters(), lr=self.learning_rate_D * 0.1, betas=(self.beta1, self.beta2))  # LR réduit pour D
         self.OptimizerG = torch.optim.Adam(
             self.netG.parameters(), lr=self.learning_rate_G, betas=(self.beta1, self.beta2))
 
@@ -342,31 +348,35 @@ class UCVGan():
                     y = y.to(self.device, non_blocking=True)
                     total_images += current_batch_size
 
-                    ############## Train Discriminator ##############
-                    self.OptimizerD.zero_grad(set_to_none=True)
-                    
+                    # Générer les fausses images une seule fois par batch
                     with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
                         y_fake = self.netG(x)
-                        D_real = self.netD(x, y)
-                        D_fake = self.netD(x, y_fake.detach())
+
+                    ############## Train Discriminator ##############
+                    # N'entraîner le discriminateur que toutes les n_critic itérations
+                    if idx % self.n_critic == 0:
+                        self.OptimizerD.zero_grad(set_to_none=True)
                         
-                        real_label = torch.ones_like(D_real) * 0.9  # Label smoothing
-                        fake_label = torch.zeros_like(D_fake) + 0.1  # Label smoothing
-                        
-                        D_real_loss = self.BCE_Loss(D_real + self.eps, real_label)
-                        D_fake_loss = self.BCE_Loss(D_fake + self.eps, fake_label)
-                        D_loss = (D_fake_loss + D_real_loss) / 2
-                        
-                        # Gradient penalty déjà multiplié par lambda_gp dans la classe
-                        gp = gradient_penalty(self.netD, y.detach(), y_fake.detach(), x)
-                        gp = torch.clamp(gp, -1.0, 1.0)  # Clip gradient penalty
-                        D_loss_W = D_loss + gp
-     
-                    self.scaler.scale(D_loss_W).backward()
-                    # Add gradient clipping
-                    self.scaler.unscale_(self.OptimizerD)
-                    torch.nn.utils.clip_grad_norm_(self.netD.parameters(), max_norm=1.0)
-                    self.scaler.step(self.OptimizerD)
+                        with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
+                            D_real = self.netD(x, y)
+                            D_fake = self.netD(x, y_fake.detach())
+                            
+                            real_label = torch.ones_like(D_real) * 0.9  # Label smoothing
+                            fake_label = torch.zeros_like(D_fake) + 0.1  # Label smoothing
+                            
+                            D_real_loss = self.BCE_Loss(D_real + self.eps, real_label)
+                            D_fake_loss = self.BCE_Loss(D_fake + self.eps, fake_label)
+                            D_loss = (D_fake_loss + D_real_loss) / 2
+                            
+                            # Gradient penalty déjà multiplié par lambda_gp dans la classe
+                            gp = gradient_penalty(self.netD, y.detach(), y_fake.detach(), x)
+                            gp = torch.clamp(gp, -1.0, 1.0)  # Clip gradient penalty
+                            D_loss_W = D_loss + gp
+         
+                        self.scaler.scale(D_loss_W).backward()
+                        self.scaler.unscale_(self.OptimizerD)
+                        torch.nn.utils.clip_grad_norm_(self.netD.parameters(), max_norm=1.0)
+                        self.scaler.step(self.OptimizerD)
 
                     ############## Train Generator ##############
                     self.OptimizerG.zero_grad(set_to_none=True)
@@ -375,10 +385,9 @@ class UCVGan():
                         D_fake = self.netD(x, y_fake)
                         G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
                         L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
-                        G_loss = G_fake_loss * 2.0 + L1
+                        G_loss = G_fake_loss * self.g_factor + L1  # Réduction du poids de la perte adversariale
 
                         self.scaler.scale(G_loss).backward()
-                        # Add gradient clipping
                         self.scaler.unscale_(self.OptimizerG)
                         torch.nn.utils.clip_grad_norm_(self.netG.parameters(), max_norm=1.0)
                         self.scaler.step(self.OptimizerG)

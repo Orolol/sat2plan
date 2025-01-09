@@ -5,9 +5,9 @@ class Model_Configuration:
 
     def __init__(self):
 
-        self.learning_rate_G = 1e-4
-        self.learning_rate_D = 1e-4
-        self.learning_rate = 2e-4
+        self.learning_rate_G = 2e-5
+        self.learning_rate_D = 2e-5
+        self.learning_rate = 2e-5
         self.beta1 = 0.5
         self.beta2 = 0.999
 
@@ -41,8 +41,8 @@ class Global_Configuration:
         self.channels_img = 3
 
         self.num_workers = 2
-        self.l1_lambda = 100
-        self.lambda_gp = 10
+        self.l1_lambda = 10.0
+        self.lambda_gp = 0.1
 
         self.load_model = True
         self.save_model = True

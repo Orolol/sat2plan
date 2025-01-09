@@ -40,8 +40,8 @@ class UCVGan():
         self.n_epochs = self.G_CFG.n_epochs
         self.sample_interval = self.G_CFG.sample_interval
         self.num_workers = self.G_CFG.num_workers
-        self.l1_lambda = self.G_CFG.l1_lambda
-        self.lambda_gp = self.G_CFG.lambda_gp
+        self.l1_lambda = 10.0  # Réduit de 100 à 10
+        self.lambda_gp = 0.1  # Réduit de 10 à 0.1
         self.load_model = self.G_CFG.load_model
         self.save_model_bool = self.G_CFG.save_model
         self.checkpoint_disc = self.G_CFG.checkpoint_disc
@@ -199,11 +199,12 @@ class UCVGan():
                 self.netD, device_ids=[self.rank], output_device=self.rank)
             print(f"Models wrapped in DistributedDataParallel on GPU {self.rank}")
 
-        # Initialize optimizers
+        # Initialize optimizers with reduced initial learning rate
+        initial_lr_factor = self.warmup_factor * 0.1
         self.OptimizerD = torch.optim.Adam(
-            self.netD.parameters(), lr=self.learning_rate_D , betas=(self.beta1, self.beta2))
+            self.netD.parameters(), lr=self.learning_rate_D * initial_lr_factor, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
-            self.netG.parameters(), lr=self.learning_rate_G , betas=(self.beta1, self.beta2))
+            self.netG.parameters(), lr=self.learning_rate_G * initial_lr_factor, betas=(self.beta1, self.beta2))
 
         # Initialize learning rate schedulers with warm restarts
         self.schedulerD = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
@@ -261,7 +262,7 @@ class UCVGan():
     def train(self):
         try:
             # Setup directories and logging
-            if self.rank == 0:  # Seulement le processus principal crée les dossiers
+            if self.rank == 0:
                 os.makedirs("save", exist_ok=True)
                 os.makedirs("save/loss", exist_ok=True)
                 os.makedirs("save/checkpoints", exist_ok=True)
@@ -282,6 +283,20 @@ class UCVGan():
             batch_times = []
             
             for epoch in range(self.starting_epoch, self.n_epochs):
+                # Update learning rates with warmup at the beginning of each epoch
+                if epoch < self.warmup_epochs:
+                    warmup_factor = self.warmup_factor + (1 - self.warmup_factor) * (epoch / self.warmup_epochs)
+                    current_lr_D = self.learning_rate_D * warmup_factor * 0.1
+                    current_lr_G = self.learning_rate_G * warmup_factor * 0.1
+                    for param_group in self.OptimizerD.param_groups:
+                        param_group['lr'] = current_lr_D
+                    for param_group in self.OptimizerG.param_groups:
+                        param_group['lr'] = current_lr_G
+                else:
+                    # After warmup, use the schedulers
+                    self.schedulerD.step(epoch - self.warmup_epochs)
+                    self.schedulerG.step(epoch - self.warmup_epochs)
+
                 if self.world_size > 1:
                     self.train_dl.sampler.set_epoch(epoch)
                 
@@ -319,8 +334,11 @@ class UCVGan():
                         D_real_loss = self.BCE_Loss(D_real + self.eps, real_label)
                         D_fake_loss = self.BCE_Loss(D_fake + self.eps, fake_label)
                         D_loss = (D_fake_loss + D_real_loss) / 2
+                        
+                        # Normalisation du gradient penalty
                         gp = gradient_penalty(self.netD, y.detach(), y_fake.detach(), x)
-                        D_loss_W = D_loss + gp
+                        gp = torch.clamp(gp, -10.0, 10.0)  # Clip gradient penalty
+                        D_loss_W = D_loss + gp * self.lambda_gp
      
                     self.scaler.scale(D_loss_W).backward()
                     # Add gradient clipping
@@ -335,14 +353,14 @@ class UCVGan():
                         D_fake = self.netD(x, y_fake)
                         G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
                         L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
-                        G_loss = G_fake_loss + L1
+                        G_loss = G_fake_loss * 2.0 + L1  # Augmente l'importance de la perte adversariale
 
-                    self.scaler.scale(G_loss).backward()
-                    # Add gradient clipping
-                    self.scaler.unscale_(self.OptimizerG)
-                    torch.nn.utils.clip_grad_norm_(self.netG.parameters(), max_norm=1.0)
-                    self.scaler.step(self.OptimizerG)
-                    self.scaler.update()
+                        self.scaler.scale(G_loss).backward()
+                        # Add gradient clipping
+                        self.scaler.unscale_(self.OptimizerG)
+                        torch.nn.utils.clip_grad_norm_(self.netG.parameters(), max_norm=1.0)
+                        self.scaler.step(self.OptimizerG)
+                        self.scaler.update()
 
                     # Accumulate losses
                     epoch_d_loss += D_loss_W.item()
@@ -398,17 +416,6 @@ class UCVGan():
                     print(f"Validation Discriminator Loss : {self.val_Dis_loss[-1]:.3f} = Real: {self.val_D_real_loss[-1]:.3f} + Fake: {self.val_D_fake_loss[-1]:.3f}")
                     print(f"Validation Generator Loss : {self.val_Gen_loss[-1]:.3f} = Adv: {self.val_Gen_fake_loss[-1]:.3f} + L1: {self.val_Gen_L1_loss[-1]:.3f}")
                     print("------------------------")
-
-                    # Update learning rates with warmup
-                    if epoch < self.warmup_epochs:
-                        warmup_factor = self.warmup_factor + (1 - self.warmup_factor) * (epoch / self.warmup_epochs)
-                        for param_group in self.OptimizerD.param_groups:
-                            param_group['lr'] = self.learning_rate_D * warmup_factor * 0.1
-                        for param_group in self.OptimizerG.param_groups:
-                            param_group['lr'] = self.learning_rate_G * warmup_factor * 0.1
-                    else:
-                        self.schedulerD.step((epoch - self.warmup_epochs) + idx / len(self.train_dl))
-                        self.schedulerG.step((epoch - self.warmup_epochs) + idx / len(self.train_dl))
 
                     # Early stopping check
                     if val_loss < self.best_loss:

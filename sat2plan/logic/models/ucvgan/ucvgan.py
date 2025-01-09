@@ -201,9 +201,9 @@ class UCVGan():
 
         # Initialize optimizers
         self.OptimizerD = torch.optim.Adam(
-            self.netD.parameters(), lr=self.learning_rate_D * 0.1, betas=(self.beta1, self.beta2))
+            self.netD.parameters(), lr=self.learning_rate_D , betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
-            self.netG.parameters(), lr=self.learning_rate_G * 0.1, betas=(self.beta1, self.beta2))
+            self.netG.parameters(), lr=self.learning_rate_G , betas=(self.beta1, self.beta2))
 
         # Initialize learning rate schedulers with warm restarts
         self.schedulerD = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
@@ -357,12 +357,12 @@ class UCVGan():
 
                     if self.rank == 0 and idx % 10 == 0:
                         print(
-                            "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [%.2f img/s] [lr D: %e] [lr G: %e]"
+                            "[Epoch %d/%d] [Batch %d/%d] [D: disc %.3f | gp %.3f] [G: adv %.3f | L1 %.3f] [%.2f img/s] [lr D: %e] [lr G: %e]"
                             % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), 
-                               D_loss_W.item(), G_loss.item(), images_per_sec,
+                               D_loss.item(), gp.item(), G_fake_loss.item(), L1.item(), images_per_sec,
                                self.OptimizerD.param_groups[0]['lr'], self.OptimizerG.param_groups[0]['lr']))
                         
-                        if idx % 10 == 0:
+                        if idx % 100 == 0:  # Changé de 10 à 100 pour réduire le nombre d'images sauvegardées
                             with torch.no_grad():
                                 with torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
                                     concatenated_images = torch.cat((x[:4], y_fake[:4], y[:4]), dim=2)
@@ -392,9 +392,9 @@ class UCVGan():
                     print("-- Validation Test --")
                     self.validation()
                     val_loss = self.val_Gen_loss[-1] + self.val_Dis_loss[-1]
-                    print(f"Epoch : {epoch+1}/{self.n_epochs} :")
-                    print(f"Validation Discriminator Loss : {self.val_Dis_loss[-1]}")
-                    print(f"Validation Generator Loss : {self.val_Gen_loss[-1]} : {self.val_Gen_fake_loss[-1]} + {self.val_Gen_L1_loss[-1]}")
+                    print(f"Epoch : {epoch+1}/{self.n_epochs}")
+                    print(f"Validation Discriminator Loss : {self.val_Dis_loss[-1]:.3f} = Real: {self.val_D_real_loss[-1]:.3f} + Fake: {self.val_D_fake_loss[-1]:.3f}")
+                    print(f"Validation Generator Loss : {self.val_Gen_loss[-1]:.3f} = Adv: {self.val_Gen_fake_loss[-1]:.3f} + L1: {self.val_Gen_L1_loss[-1]:.3f}")
                     print("------------------------")
 
                     # Update learning rates with warmup

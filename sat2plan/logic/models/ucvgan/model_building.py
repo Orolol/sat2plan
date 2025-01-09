@@ -90,86 +90,105 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, kernel_size=3, stride=1, padding=1, in_channels=3, features=48):
+    def __init__(self, kernel_size=3, stride=1, padding=1, in_channels=3, features=64):
         super().__init__()
         
-        # Initial downsampling: (B, 3, 256, 256) -> (B, 48, 256, 256)
+        # Initial downsampling avec normalisation
         self.initial_down = nn.Sequential(
             nn.Conv2d(in_channels, features, kernel_size, stride, padding, padding_mode="reflect", bias=False),
+            nn.InstanceNorm2d(features, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(features, features, kernel_size, stride, padding, padding_mode="reflect", bias=False),
+            nn.InstanceNorm2d(features, affine=True),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
-        # Encoder blocks with reduced feature sizes
+        # Encoder blocks with increased feature sizes
         self.encoder = nn.ModuleList([
-            # Block 1: (B, 48, 256, 256) -> (B, 96, 128, 128)
+            # Block 1: (B, 64, 256, 256) -> (B, 128, 128, 128)
             nn.ModuleDict({
                 'conv': UVCCNNlock(features, features*2, down=True),
                 'scale': DownsamplingBlock(features*2, features*2)
             }),
-            # Block 2: (B, 96, 128, 128) -> (B, 192, 64, 64)
+            # Block 2: (B, 128, 128, 128) -> (B, 256, 64, 64)
             nn.ModuleDict({
                 'conv': UVCCNNlock(features*2, features*4, down=True),
                 'scale': DownsamplingBlock(features*4, features*4)
             }),
-            # Block 3: (B, 192, 64, 64) -> (B, 384, 32, 32)
+            # Block 3: (B, 256, 64, 64) -> (B, 512, 32, 32)
             nn.ModuleDict({
                 'conv': UVCCNNlock(features*4, features*8, down=True),
                 'scale': DownsamplingBlock(features*8, features*8)
             }),
-            # Block 4: (B, 384, 32, 32) -> (B, 384, 16, 16)
+            # Block 4: (B, 512, 32, 32) -> (B, 512, 16, 16)
             nn.ModuleDict({
                 'conv': UVCCNNlock(features*8, features*8, down=True),
                 'scale': DownsamplingBlock(features*8, features*8)
             }),
-            # Block 5: (B, 384, 16, 16) -> (B, 384, 8, 8)
+            # Block 5: (B, 512, 16, 16) -> (B, 512, 8, 8)
             nn.ModuleDict({
                 'conv': UVCCNNlock(features*8, features*8, down=True),
                 'scale': DownsamplingBlock(features*8, features*8)
             })
         ])
 
-        # Bottleneck: (B, 384, 8, 8) -> (B, 384, 8, 8)
+        # Bottleneck with increased attention heads and blocks
         self.bottleneck = PixelwiseViT(
-            features * 8, 8, 8, 1536,  # Réduit encore la taille du bottleneck
+            features * 8, 16, 12, 2048,  # Plus de têtes d'attention et de blocs
             features * 8,
             image_shape=(features * 8, 8, 8),
-            rezero=True
+            rezero=True,
+            dropout=0.1  # Ajout de dropout pour régularisation
         )
 
-        # Decoder blocks
+        # Decoder blocks with skip connections and increased features
         self.decoder = nn.ModuleList([
-            # Block 1: (B, 768, 8, 8) -> (B, 384, 16, 16)
+            # Block 1: (B, 1024, 8, 8) -> (B, 512, 16, 16)
             nn.ModuleDict({
                 'scale': UpsamplingBlock(features*16, features*16),
                 'conv': UVCCNNlock(features*16, features*8, down=False)
             }),
-            # Block 2: (B, 768, 16, 16) -> (B, 384, 32, 32)
+            # Block 2: (B, 1024, 16, 16) -> (B, 512, 32, 32)
             nn.ModuleDict({
                 'scale': UpsamplingBlock(features*16, features*16),
                 'conv': UVCCNNlock(features*16, features*8, down=False)
             }),
-            # Block 3: (B, 768, 32, 32) -> (B, 384, 64, 64)
+            # Block 3: (B, 1024, 32, 32) -> (B, 512, 64, 64)
             nn.ModuleDict({
                 'scale': UpsamplingBlock(features*16, features*16),
                 'conv': UVCCNNlock(features*16, features*8, down=False)
             }),
-            # Block 4: (B, 576, 64, 64) -> (B, 192, 128, 128)
+            # Block 4: (B, 768, 64, 64) -> (B, 256, 128, 128)
             nn.ModuleDict({
                 'scale': UpsamplingBlock(features*12, features*12),
                 'conv': UVCCNNlock(features*12, features*4, down=False)
             }),
-            # Block 5: (B, 288, 128, 128) -> (B, 96, 256, 256)
+            # Block 5: (B, 384, 128, 128) -> (B, 128, 256, 256)
             nn.ModuleDict({
                 'scale': UpsamplingBlock(features*6, features*6),
                 'conv': UVCCNNlock(features*6, features*2, down=False)
             })
         ])
 
-        # Final upsampling: (B, 96, 256, 256) -> (B, 3, 256, 256)
+        # Final upsampling avec plus de couches
         self.final_up = nn.Sequential(
-            nn.ConvTranspose2d(features * 2, in_channels, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.Conv2d(features * 2, features, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.InstanceNorm2d(features, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.InstanceNorm2d(features // 2, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(features // 2, in_channels, kernel_size=1, stride=1, padding=0),
             nn.Tanh()
         )
+
+        # Initialisation des poids
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, a=0.2, mode='fan_in', nonlinearity='leaky_relu')
+            elif isinstance(m, nn.InstanceNorm2d) and m.affine:
+                nn.init.constant_(m.weight, 1.0)
+                nn.init.constant_(m.bias, 0.0)
 
     @torch.cuda.amp.autocast()
     def forward(self, x):
@@ -181,7 +200,7 @@ class Generator(nn.Module):
         current = d1
         for block in self.encoder:
             current = block['scale'](block['conv'](current))
-            encoder_features.append(current.detach())
+            encoder_features.append(current)
         
         # Bottleneck
         bottleneck = self.bottleneck(encoder_features[-1])
@@ -192,7 +211,6 @@ class Generator(nn.Module):
             skip_connection = encoder_features[-(idx+1)]
             current = torch.cat([current, skip_connection], dim=1)
             current = block['conv'](block['scale'](current))
-            del skip_connection
         
         # Final upsampling
         result = self.final_up(current)

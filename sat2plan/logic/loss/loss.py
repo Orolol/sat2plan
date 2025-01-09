@@ -6,12 +6,16 @@ from torch.autograd import grad
 
 
 class AdversarialLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, mode='bce'):
         super(AdversarialLoss, self).__init__()
-
-    def forward(self, y_fake, y):
-        adversarial_loss = torch.mean(torch.log(y) + torch.log(1 - y_fake))
-        return adversarial_loss
+        self.mode = mode
+        if mode == 'bce':
+            self.loss = nn.BCEWithLogitsLoss()
+        elif mode == 'mse':
+            self.loss = nn.MSELoss()
+        
+    def forward(self, pred, target):
+        return self.loss(pred, target)
 
 
 class ContentLoss(nn.Module):
@@ -20,35 +24,42 @@ class ContentLoss(nn.Module):
         self.alpha1 = alpha1
         self.alpha2 = alpha2
         self.alpha3 = alpha3
-        self.vgg = models.vgg19(weights='DEFAULT').features.eval()
+        self.vgg = models.vgg19(weights='DEFAULT').features[:35].eval()  # Utilise jusqu'à conv5_4
         self.l1_loss = nn.L1Loss()
+        
+        # Figer les paramètres du VGG
+        for param in self.vgg.parameters():
+            param.requires_grad = False
 
     def forward(self, y_fake, y):
-        y_fake_features = self.vgg(y_fake)
-        y_features = self.vgg(y)
-
-        vgg_loss = 0
-        pixel_level_loss = self.l1_loss(y_fake, y)
-
-        for y_fake_feat, y_feat in zip(y_fake_features, y_features):
-            vgg_loss += self.l1_loss(y_fake_feat, y_feat)
-
-        vgg_loss *= self.alpha1
-
-        # Calcul de la topological consistency loss (L_top)
-        gradient_generated_x = torch.abs(
-            y_fake[:, :, :-1, :] - y_fake[:, :, 1:, :])
-        gradient_generated_y = torch.abs(
-            y_fake[:, :, :, :-1] - y_fake[:, :, :, 1:])
-        gradient_real_x = torch.abs(y[:, :, :-1, :] - y[:, :, 1:, :])
-        gradient_real_y = torch.abs(y[:, :, :, :-1] - y[:, :, :, 1:])
-
-        topological_loss = self.l1_loss(
-            gradient_generated_x, gradient_real_x) + self.l1_loss(gradient_generated_y, gradient_real_y)
-        topological_loss *= self.alpha3
-
-        total_content_loss = vgg_loss + self.alpha2 * pixel_level_loss + topological_loss
-        return total_content_loss
+        # Normalisation des entrées pour VGG
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(y_fake.device)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(y_fake.device)
+        y_fake_norm = (y_fake + 1) / 2  # Convert from [-1, 1] to [0, 1]
+        y_norm = (y + 1) / 2
+        y_fake_norm = (y_fake_norm - mean) / std
+        y_norm = (y_norm - mean) / std
+        
+        # Extraction des features VGG
+        y_fake_features = self.vgg(y_fake_norm)
+        y_features = self.vgg(y_norm)
+        
+        # Perceptual loss (VGG)
+        perceptual_loss = self.l1_loss(y_fake_features, y_features) * self.alpha1
+        
+        # Pixel-level L1 loss
+        pixel_loss = self.l1_loss(y_fake, y) * self.alpha2
+        
+        # Topological consistency loss
+        gradient_fake_x = torch.abs(y_fake[:, :, :, 1:] - y_fake[:, :, :, :-1])
+        gradient_fake_y = torch.abs(y_fake[:, :, 1:, :] - y_fake[:, :, :-1, :])
+        gradient_real_x = torch.abs(y[:, :, :, 1:] - y[:, :, :, :-1])
+        gradient_real_y = torch.abs(y[:, :, 1:, :] - y[:, :, :-1, :])
+        
+        topo_loss = (self.l1_loss(gradient_fake_x, gradient_real_x) + 
+                    self.l1_loss(gradient_fake_y, gradient_real_y)) * self.alpha3
+        
+        return perceptual_loss + pixel_loss + topo_loss
 
 
 class StyleLoss(nn.Module):
@@ -74,33 +85,44 @@ class GradientPenalty:
         self.lambda_gp = lambda_gp
         self.device = device
 
-    def __call__(self, netD, real_samples, fake_samples, X):
-        """Calcule le gradient penalty"""
-        # Génère un nombre aléatoire pour chaque échantillon
-        alpha = torch.rand(real_samples.size(0), 1, 1, 1, device=self.device)
+    def __call__(self, netD, real_samples, fake_samples, condition):
+        """Calcule le gradient penalty pour WGAN-GP
+        Args:
+            netD: le discriminateur
+            real_samples: échantillons réels
+            fake_samples: échantillons générés
+            condition: l'image satellite d'entrée (condition)
+        """
+        # Génère un nombre aléatoire pour l'interpolation
+        alpha = torch.rand((real_samples.size(0), 1, 1, 1), device=self.device)
         
         # Crée des échantillons interpolés
-        interpolates = (alpha * real_samples + (1 - alpha) * fake_samples)
-        interpolates = interpolates.requires_grad_(True)
+        interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
         
-        # Calcule la sortie du discriminateur
-        disc_interpolates = netD(X, interpolates)
+        # Calcule la sortie du discriminateur pour les échantillons interpolés
+        d_interpolates = netD(condition, interpolates)
+
+        # Prépare les gradients pour le calcul
+        fake = torch.ones(d_interpolates.size(), device=self.device, requires_grad=False)
         
-        # Calcule le gradient
+        # Calcule les gradients de la sortie par rapport aux entrées
         gradients = torch.autograd.grad(
-            outputs=disc_interpolates,
+            outputs=d_interpolates,
             inputs=interpolates,
-            grad_outputs=torch.ones_like(disc_interpolates, device=self.device),
+            grad_outputs=fake,
             create_graph=True,
             retain_graph=True,
             only_inputs=True
         )[0]
-
-        # Calcule la norme du gradient
-        gradients = gradients.view(gradients.size(0), -1)
-        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
         
-        return gradient_penalty * self.lambda_gp
+        # Calcule la norme L2 des gradients pour chaque échantillon
+        gradients = gradients.view(gradients.size(0), -1)
+        gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
+        
+        # Calcule la pénalité ((||grad|| - 1)²)
+        gradient_penalty = ((gradients_norm - 1) ** 2).mean()
+        
+        return gradient_penalty
 
 
 """# Exemple d'utilisation :

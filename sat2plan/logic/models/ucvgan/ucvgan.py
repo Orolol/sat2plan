@@ -224,24 +224,31 @@ class UCVGan():
                 self.netD, device_ids=[self.rank], output_device=self.rank)
             print(f"Models wrapped in DistributedDataParallel on GPU {self.rank}")
 
-        # Initialize optimizers with reduced initial learning rate
-        initial_lr_factor = self.warmup_factor 
+        # Initialize optimizers with full learning rate
         self.OptimizerD = torch.optim.Adam(
-            self.netD.parameters(), lr=self.learning_rate_D * initial_lr_factor, betas=(self.beta1, self.beta2))
+            self.netD.parameters(), lr=self.learning_rate_D, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
-            self.netG.parameters(), lr=self.learning_rate_G * initial_lr_factor, betas=(self.beta1, self.beta2))
+            self.netG.parameters(), lr=self.learning_rate_G, betas=(self.beta1, self.beta2))
 
-        # Initialize learning rate schedulers with warm restarts
-        self.schedulerD = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            self.OptimizerD, T_0=10, T_mult=2, eta_min=1e-5
-        )
-        self.schedulerG = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            self.OptimizerG, T_0=10, T_mult=2, eta_min=1e-5
-        )
+        # Custom learning rate scheduler
+        total_epochs = self.n_epochs
+        constant_epochs = total_epochs // 2
+        
+        def lr_lambda(epoch):
+            if epoch < constant_epochs:
+                return 1.0
+            else:
+                # Linear decay from 1.0 to 0 in the second half
+                return 1.0 - (epoch - constant_epochs) / (total_epochs - constant_epochs)
+        
+        self.schedulerD = torch.optim.lr_scheduler.LambdaLR(self.OptimizerD, lr_lambda)
+        self.schedulerG = torch.optim.lr_scheduler.LambdaLR(self.OptimizerG, lr_lambda)
 
-        # Warmup parameters
-        self.warmup_epochs = 5
-        self.warmup_factor = 0.1
+        # Compile models if using PyTorch 2.0+
+        if hasattr(torch, 'compile'):
+            self.netG = torch.compile(self.netG)
+            self.netD = torch.compile(self.netD)
+            print("Models compiled with torch.compile()")
 
         # Load model and optimizer states if requested
         if self.load_model:
@@ -308,19 +315,9 @@ class UCVGan():
             batch_times = []
             
             for epoch in range(self.starting_epoch, self.n_epochs):
-                # Update learning rates with warmup at the beginning of each epoch
-                if epoch < self.warmup_epochs:
-                    warmup_factor = self.warmup_factor + (1 - self.warmup_factor) * (epoch / self.warmup_epochs)
-                    current_lr_D = self.learning_rate_D * warmup_factor 
-                    current_lr_G = self.learning_rate_G * warmup_factor
-                    for param_group in self.OptimizerD.param_groups:
-                        param_group['lr'] = current_lr_D
-                    for param_group in self.OptimizerG.param_groups:
-                        param_group['lr'] = current_lr_G
-                else:
-                    # After warmup, use the schedulers
-                    self.schedulerD.step(epoch - self.warmup_epochs)
-                    self.schedulerG.step(epoch - self.warmup_epochs)
+                # Update learning rates using schedulers
+                self.schedulerD.step()
+                self.schedulerG.step()
 
                 if self.world_size > 1:
                     self.train_dl.sampler.set_epoch(epoch)

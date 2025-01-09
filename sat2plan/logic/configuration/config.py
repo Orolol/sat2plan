@@ -5,9 +5,9 @@ class Model_Configuration:
 
     def __init__(self):
 
-        self.learning_rate_G = 2e-5
-        self.learning_rate_D = 2e-5
-        self.learning_rate = 2e-5
+        self.learning_rate_G = 1e-4
+        self.learning_rate_D = 1e-4
+        self.learning_rate = 1e-4
         self.beta1 = 0.5
         self.beta2 = 0.999
 
@@ -33,7 +33,7 @@ class Global_Configuration:
 
         self.n_cpu = 6
 
-        self.batch_size = 4
+        self.batch_size = 2
         self.n_epochs = 200
         self.sample_interval = 10
 

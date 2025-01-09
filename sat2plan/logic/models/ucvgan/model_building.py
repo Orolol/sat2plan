@@ -11,72 +11,77 @@ from sat2plan.logic.blocks.blocks import CNN_Block, UVCCNNlock, PixelwiseViT, Do
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, padding_mode="reflect")
-        self.in1 = nn.InstanceNorm2d(out_channels)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, padding_mode="reflect")
-        self.in2 = nn.InstanceNorm2d(out_channels)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, padding_mode="reflect", bias=False)
+        self.in1 = nn.InstanceNorm2d(out_channels, affine=True)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, padding_mode="reflect", bias=False)
+        self.in2 = nn.InstanceNorm2d(out_channels, affine=True)
+        self.lrelu = nn.LeakyReLU(0.2, inplace=True)
         
         self.shortcut = nn.Sequential()
         if stride != 1 or in_channels != out_channels:
             self.shortcut = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
-                nn.InstanceNorm2d(out_channels)
+                nn.InstanceNorm2d(out_channels, affine=True)
             )
+        
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, a=0.2, mode='fan_in', nonlinearity='leaky_relu')
         
     def forward(self, x):
         residual = x
-        out = nn.LeakyReLU(0.2, inplace=True)(self.in1(self.conv1(x)))
+        out = self.lrelu(self.in1(self.conv1(x)))
         out = self.in2(self.conv2(out))
         out += self.shortcut(residual)
-        out = nn.LeakyReLU(0.2, inplace=True)(out)
+        out = self.lrelu(out)
         return out
 
 class Discriminator(nn.Module):
     def __init__(self, in_channels=3):
         super().__init__()
         
-        # Initial layer
         self.initial = nn.Sequential(
-            nn.Conv2d(in_channels*2, 64, kernel_size=4, stride=2, padding=1, padding_mode="reflect"),
+            nn.Conv2d(in_channels*2, 32, kernel_size=4, stride=2, padding=1, padding_mode="reflect", bias=False),
+            nn.InstanceNorm2d(32, affine=True),
             nn.LeakyReLU(0.2, inplace=True)
         )
         
-        # Residual blocks with increasing features
         self.layer1 = nn.Sequential(
+            ResidualBlock(32, 64, stride=2),
+            ResidualBlock(64, 64)
+        )
+        
+        self.layer2 = nn.Sequential(
             ResidualBlock(64, 128, stride=2),
             ResidualBlock(128, 128)
         )
         
-        self.layer2 = nn.Sequential(
+        self.layer3 = nn.Sequential(
             ResidualBlock(128, 256, stride=2),
             ResidualBlock(256, 256)
         )
         
-        self.layer3 = nn.Sequential(
-            ResidualBlock(256, 512, stride=2),
-            ResidualBlock(512, 512)
+        self.final = nn.Sequential(
+            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, padding_mode="reflect", bias=False),
+            nn.InstanceNorm2d(256, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(256, 1, kernel_size=3, stride=1, padding=1, padding_mode="reflect")
         )
         
-        # Final layers
-        self.final = nn.Sequential(
-            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1, padding_mode="reflect"),
-            nn.InstanceNorm2d(512),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(512, 1, kernel_size=3, stride=1, padding=1, padding_mode="reflect")
-        )
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, a=0.2, mode='fan_in', nonlinearity='leaky_relu')
+            elif isinstance(m, nn.InstanceNorm2d) and m.affine:
+                nn.init.constant_(m.weight, 1.0)
+                nn.init.constant_(m.bias, 0.0)
 
     def forward(self, x, y):
-        # Concatenate input and condition
         x = torch.cat([x, y], dim=1)
-        
-        # Forward pass through network
         x = self.initial(x)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.final(x)
-        
-        return x
+        return self.final(x)
 
 
 ####################################################################################################################

@@ -225,7 +225,7 @@ class UCVGan():
             print(f"Models wrapped in DistributedDataParallel on GPU {self.rank}")
 
         # Initialize optimizers with reduced initial learning rate
-        initial_lr_factor = self.warmup_factor * 0.1
+        initial_lr_factor = self.warmup_factor 
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), lr=self.learning_rate_D * initial_lr_factor, betas=(self.beta1, self.beta2))
         self.OptimizerG = torch.optim.Adam(
@@ -233,10 +233,10 @@ class UCVGan():
 
         # Initialize learning rate schedulers with warm restarts
         self.schedulerD = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            self.OptimizerD, T_0=10, T_mult=2, eta_min=1e-6
+            self.OptimizerD, T_0=10, T_mult=2, eta_min=1e-5
         )
         self.schedulerG = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            self.OptimizerG, T_0=10, T_mult=2, eta_min=1e-6
+            self.OptimizerG, T_0=10, T_mult=2, eta_min=1e-5
         )
 
         # Warmup parameters
@@ -311,8 +311,8 @@ class UCVGan():
                 # Update learning rates with warmup at the beginning of each epoch
                 if epoch < self.warmup_epochs:
                     warmup_factor = self.warmup_factor + (1 - self.warmup_factor) * (epoch / self.warmup_epochs)
-                    current_lr_D = self.learning_rate_D * warmup_factor * 0.1
-                    current_lr_G = self.learning_rate_G * warmup_factor * 0.1
+                    current_lr_D = self.learning_rate_D * warmup_factor 
+                    current_lr_G = self.learning_rate_G * warmup_factor
                     for param_group in self.OptimizerD.param_groups:
                         param_group['lr'] = current_lr_D
                     for param_group in self.OptimizerG.param_groups:

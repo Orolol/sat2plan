@@ -33,7 +33,7 @@ class Global_Configuration:
 
         self.n_cpu = 6
 
-        self.batch_size = 2
+        self.batch_size = 16
         self.n_epochs = 200
         self.sample_interval = 10
 

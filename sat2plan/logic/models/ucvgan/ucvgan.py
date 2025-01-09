@@ -244,6 +244,8 @@ class UCVGan():
         self.val_Gen_loss = []
         self.val_Gen_fake_loss = []
         self.val_Gen_L1_loss = []
+        self.val_D_real_loss = []
+        self.val_D_fake_loss = []
 
         # Early stopping parameters
         self.best_loss = float('inf')
@@ -466,6 +468,8 @@ class UCVGan():
         sum_G_loss = 0
         sum_G_fake_loss = 0
         sum_G_L1_loss = 0
+        sum_D_real_loss = 0
+        sum_D_fake_loss = 0
         num_batches = 0
 
         with torch.no_grad(), torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
@@ -481,8 +485,11 @@ class UCVGan():
                 D_real = self.netD(x, y)
                 D_fake = self.netD(x, y_fake)
                 
-                D_real_loss = self.BCE_Loss(D_real, torch.ones_like(D_real))
-                D_fake_loss = self.BCE_Loss(D_fake, torch.zeros_like(D_fake))
+                real_label = torch.ones_like(D_real) * 0.9  # Label smoothing
+                fake_label = torch.zeros_like(D_fake) + 0.1  # Label smoothing
+                
+                D_real_loss = self.BCE_Loss(D_real, real_label)
+                D_fake_loss = self.BCE_Loss(D_fake, fake_label)
                 D_loss = (D_real_loss + D_fake_loss) / 2
                 
                 # Generator losses
@@ -495,6 +502,8 @@ class UCVGan():
                 sum_G_loss += G_loss.item()
                 sum_G_fake_loss += G_fake_loss.item()
                 sum_G_L1_loss += G_L1.item()
+                sum_D_real_loss += D_real_loss.item()
+                sum_D_fake_loss += D_fake_loss.item()
                 num_batches += 1
                 
                 # Explicitement libérer la mémoire
@@ -507,12 +516,16 @@ class UCVGan():
         avg_G_loss = sum_G_loss / num_batches
         avg_G_fake_loss = sum_G_fake_loss / num_batches
         avg_G_L1_loss = sum_G_L1_loss / num_batches
+        avg_D_real_loss = sum_D_real_loss / num_batches
+        avg_D_fake_loss = sum_D_fake_loss / num_batches
         
         # Stocker les résultats
         self.val_Dis_loss.append(avg_D_loss)
         self.val_Gen_loss.append(avg_G_loss)
         self.val_Gen_fake_loss.append(avg_G_fake_loss)
         self.val_Gen_L1_loss.append(avg_G_L1_loss)
+        self.val_D_real_loss.append(avg_D_real_loss)
+        self.val_D_fake_loss.append(avg_D_fake_loss)
         
         # Retour en mode train
         self.netG.train()

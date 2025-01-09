@@ -97,32 +97,30 @@ class GradientPenalty:
         alpha = torch.rand((real_samples.size(0), 1, 1, 1), device=self.device)
         
         # Crée des échantillons interpolés
-        interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
+        interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples))
+        interpolates.requires_grad_(True)
         
         # Calcule la sortie du discriminateur pour les échantillons interpolés
         d_interpolates = netD(condition, interpolates)
 
-        # Prépare les gradients pour le calcul
-        fake = torch.ones(d_interpolates.size(), device=self.device, requires_grad=False)
-        
-        # Calcule les gradients de la sortie par rapport aux entrées
+        # Calcule les gradients
         gradients = torch.autograd.grad(
             outputs=d_interpolates,
             inputs=interpolates,
-            grad_outputs=fake,
+            grad_outputs=torch.ones_like(d_interpolates),
             create_graph=True,
             retain_graph=True,
             only_inputs=True
         )[0]
         
-        # Calcule la norme L2 des gradients pour chaque échantillon
-        gradients = gradients.view(gradients.size(0), -1)
-        gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
+        # Calcule la norme des gradients
+        gradients = gradients.view(real_samples.size(0), -1)
+        gradient_norm = gradients.norm(2, dim=1)
         
-        # Calcule la pénalité ((||grad|| - 1)²)
-        gradient_penalty = ((gradients_norm - 1) ** 2).mean()
+        # Calcule la pénalité
+        gradient_penalty = ((gradient_norm - 1) ** 2).mean()
         
-        return gradient_penalty
+        return gradient_penalty * self.lambda_gp
 
 
 """# Exemple d'utilisation :

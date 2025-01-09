@@ -357,10 +357,10 @@ class UCVGan():
                         D_fake_loss = self.BCE_Loss(D_fake + self.eps, fake_label)
                         D_loss = (D_fake_loss + D_real_loss) / 2
                         
-                        # Normalisation du gradient penalty
+                        # Gradient penalty déjà multiplié par lambda_gp dans la classe
                         gp = gradient_penalty(self.netD, y.detach(), y_fake.detach(), x)
-                        gp = torch.clamp(gp, -10.0, 10.0)  # Clip gradient penalty
-                        D_loss_W = D_loss + gp * self.lambda_gp
+                        gp = torch.clamp(gp, -1.0, 1.0)  # Clip gradient penalty
+                        D_loss_W = D_loss + gp
      
                     self.scaler.scale(D_loss_W).backward()
                     # Add gradient clipping

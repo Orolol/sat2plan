@@ -190,7 +190,7 @@ class Generator(nn.Module):
                 nn.init.constant_(m.weight, 1.0)
                 nn.init.constant_(m.bias, 0.0)
 
-    @torch.cuda.amp.autocast()
+    @torch.amp.autocast('cuda')
     def forward(self, x):
         # Initial downsampling
         d1 = self.initial_down(x)

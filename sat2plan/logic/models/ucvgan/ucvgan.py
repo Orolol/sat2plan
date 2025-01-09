@@ -25,97 +25,122 @@ import shutil
 
 class UCVGan():
     def __init__(self, rank, world_size):
-        # Use the already created temporary directory
-        self.temp_dir = temp_dir
-        
-        # Import des paramètres globaux
-        self.G_CFG = Global_Configuration()
-        self.n_cpu = self.G_CFG.n_cpu
-        self.rank = rank
-        self.world_size = world_size
-        self.train_dir = f"{self.G_CFG.train_dir}/{self.G_CFG.data_bucket}"
-        self.val_dir = f"{self.G_CFG.val_dir}/{self.G_CFG.data_bucket}"
-        self.image_size = self.G_CFG.image_size
-        self.batch_size = self.G_CFG.batch_size
-        self.n_epochs = self.G_CFG.n_epochs
-        self.sample_interval = self.G_CFG.sample_interval
-        self.num_workers = self.G_CFG.num_workers
-        self.l1_lambda = 10.0  # Réduit de 100 à 10
-        self.lambda_gp = 0.1  # Réduit de 10 à 0.1
-        self.load_model = self.G_CFG.load_model
-        self.save_model_bool = self.G_CFG.save_model
-        self.checkpoint_disc = self.G_CFG.checkpoint_disc
-        self.checkpoint_gen = self.G_CFG.checkpoint_gen
-
-        # Import des hyperparamètres du modèle
-        self.M_CFG = Model_Configuration()
-        self.learning_rate_D = self.M_CFG.learning_rate_D
-        self.learning_rate_G = self.M_CFG.learning_rate_G
-        self.beta1 = self.M_CFG.beta1
-        self.beta2 = self.M_CFG.beta2
-
-        # Setup device et distributed
-        self.setup_device()
-        if self.cuda:
-            torch.cuda.set_device(self.rank)
+        try:
+            # Use the already created temporary directory
+            self.temp_dir = temp_dir
             
-        # Loading Data
-        self.dataloading()
+            # Import des paramètres globaux
+            self.G_CFG = Global_Configuration()
+            self.n_cpu = self.G_CFG.n_cpu
+            self.rank = rank
+            self.world_size = world_size
+            self.train_dir = f"{self.G_CFG.train_dir}/{self.G_CFG.data_bucket}"
+            self.val_dir = f"{self.G_CFG.val_dir}/{self.G_CFG.data_bucket}"
+            self.image_size = self.G_CFG.image_size
+            self.batch_size = self.G_CFG.batch_size
+            self.n_epochs = self.G_CFG.n_epochs
+            self.sample_interval = self.G_CFG.sample_interval
+            self.num_workers = self.G_CFG.num_workers
+            self.l1_lambda = 10.0  # Réduit de 100 à 10
+            self.lambda_gp = 0.1  # Réduit de 10 à 0.1
+            self.load_model = self.G_CFG.load_model
+            self.save_model_bool = self.G_CFG.save_model
+            self.checkpoint_disc = self.G_CFG.checkpoint_disc
+            self.checkpoint_gen = self.G_CFG.checkpoint_gen
 
-        # Création des models, optimizers, losses
-        self.create_models()
+            # Import des hyperparamètres du modèle
+            self.M_CFG = Model_Configuration()
+            self.learning_rate_D = self.M_CFG.learning_rate_D
+            self.learning_rate_G = self.M_CFG.learning_rate_G
+            self.beta1 = self.M_CFG.beta1
+            self.beta2 = self.M_CFG.beta2
 
-        # If True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest
-        if self.cuda:
-            torch.backends.cudnn.benchmark = True
+            # Warmup parameters (avant setup_device pour éviter les erreurs d'initialisation)
+            self.warmup_epochs = 5
+            self.warmup_factor = 0.1
+
+            # Setup device et distributed
+            self.setup_device()
+            if self.cuda:
+                torch.cuda.set_device(self.rank)
+                
+            # Loading Data
+            self.dataloading()
+
+            # Création des models, optimizers, losses
+            self.create_models()
+
+            # If True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest
+            if self.cuda:
+                torch.backends.cudnn.benchmark = True
+                
+            # Pour le debug des opérations inplace
+            if self.world_size > 1:
+                torch.autograd.set_detect_anomaly(True)
+
+            self.train()
             
-        # Pour le debug des opérations inplace
-        if self.world_size > 1:
-            torch.autograd.set_detect_anomaly(True)
-
-        self.train()
+        except Exception as e:
+            print(f"Error in process {rank}: {str(e)}")
+            import traceback
+            print("Full traceback:")
+            traceback.print_exc()
+            # Make sure to cleanup even if initialization fails
+            if hasattr(self, 'cleanup'):
+                self.cleanup()
+            raise  # Re-raise the exception after cleanup
 
     def setup_device(self):
-        self.cuda = torch.cuda.is_available()
-        if self.cuda:
-            print(f"CUDA is available - Using GPU {self.rank}")
-            self.device = torch.device(f'cuda:{self.rank}')
-            
-            # Configuration CUDA pour les performances
-            torch.backends.cudnn.benchmark = True
-            torch.backends.cuda.matmul.allow_tf32 = True
-            torch.backends.cudnn.allow_tf32 = True
-            
-            # Configuration du processus distribué
-            os.environ['MASTER_ADDR'] = 'localhost'
-            os.environ['MASTER_PORT'] = '12355'
-            dist.init_process_group(
-                "nccl", 
-                rank=self.rank, 
-                world_size=self.world_size,
-                timeout=datetime.timedelta(minutes=30)
-            )
-            
-            # Pré-allocation de la mémoire CUDA
-            torch.cuda.empty_cache()
-            total_memory = torch.cuda.get_device_properties(self.rank).total_memory
-            reserved_memory = int(total_memory * 0.95)  # Réserve 95% de la mémoire disponible
-            torch.cuda.set_per_process_memory_fraction(0.95, self.rank)
-            
-            print(f"GPU {self.rank}: Reserved {reserved_memory/1024**3:.1f}GB of VRAM")
-        else:
-            print("CUDA not available - Using CPU")
-            self.device = torch.device("cpu")
+        try:
+            self.cuda = torch.cuda.is_available()
+            if self.cuda:
+                print(f"CUDA is available - Using GPU {self.rank}")
+                self.device = torch.device(f'cuda:{self.rank}')
+                
+                # Configuration CUDA pour les performances
+                torch.backends.cudnn.benchmark = True
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
+                
+                # Configuration du processus distribué
+                if self.world_size > 1:
+                    os.environ['MASTER_ADDR'] = 'localhost'
+                    os.environ['MASTER_PORT'] = '12355'
+                    dist.init_process_group(
+                        "nccl", 
+                        rank=self.rank, 
+                        world_size=self.world_size,
+                        timeout=datetime.timedelta(minutes=30)
+                    )
+                
+                # Pré-allocation de la mémoire CUDA
+                torch.cuda.empty_cache()
+                total_memory = torch.cuda.get_device_properties(self.rank).total_memory
+                reserved_memory = int(total_memory * 0.95)  # Réserve 95% de la mémoire disponible
+                torch.cuda.set_per_process_memory_fraction(0.95, self.rank)
+                
+                print(f"GPU {self.rank}: Reserved {reserved_memory/1024**3:.1f}GB of VRAM")
+            else:
+                print("CUDA not available - Using CPU")
+                self.device = torch.device("cpu")
+        except Exception as e:
+            print(f"Error in setup_device for process {self.rank}: {str(e)}")
+            raise
 
     def cleanup(self):
-        if self.cuda and self.world_size > 1:
-            dist.destroy_process_group()
-        # Clean up temporary directory
-        if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
-            try:
-                shutil.rmtree(self.temp_dir)
-            except Exception as e:
-                print(f"Warning: Could not remove temporary directory: {e}")
+        try:
+            if self.cuda and self.world_size > 1:
+                dist.barrier()  # Ensure all processes reach this point
+                dist.destroy_process_group()
+        except Exception as e:
+            print(f"Warning: Error during cleanup: {e}")
+        finally:
+            # Clean up temporary directory
+            if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
+                try:
+                    shutil.rmtree(self.temp_dir)
+                except Exception as e:
+                    print(f"Warning: Could not remove temporary directory: {e}")
 
     def __del__(self):
         self.cleanup()
@@ -323,7 +348,7 @@ class UCVGan():
                     ############## Train Discriminator ##############
                     self.OptimizerD.zero_grad(set_to_none=True)
                     
-                    with torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
+                    with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
                         y_fake = self.netG(x)
                         D_real = self.netD(x, y)
                         D_fake = self.netD(x, y_fake.detach())
@@ -349,11 +374,11 @@ class UCVGan():
                     ############## Train Generator ##############
                     self.OptimizerG.zero_grad(set_to_none=True)
 
-                    with torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
+                    with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
                         D_fake = self.netD(x, y_fake)
                         G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
                         L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
-                        G_loss = G_fake_loss * 2.0 + L1  # Augmente l'importance de la perte adversariale
+                        G_loss = G_fake_loss * 2.0 + L1
 
                         self.scaler.scale(G_loss).backward()
                         # Add gradient clipping
@@ -384,7 +409,7 @@ class UCVGan():
                         
                         if idx % 100 == 0:  # Changé de 10 à 100 pour réduire le nombre d'images sauvegardées
                             with torch.no_grad():
-                                with torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
+                                with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
                                     concatenated_images = torch.cat((x[:4], y_fake[:4], y[:4]), dim=2)
                                 save_image(concatenated_images, f"images/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
 
@@ -462,6 +487,9 @@ class UCVGan():
                 ))
                 params_json.close()
 
+        except Exception as e:
+            print(f"Error during training: {e}")
+            raise
         finally:
             self.cleanup()
 
@@ -479,7 +507,7 @@ class UCVGan():
         sum_D_fake_loss = 0
         num_batches = 0
 
-        with torch.no_grad(), torch.amp.autocast(device_type='cuda' if self.cuda else 'cpu'):
+        with torch.no_grad(), torch.amp.autocast('cuda' if self.cuda else 'cpu'):
             for idx, (x, y, _) in enumerate(self.val_dl):
                 # Move to device and free memory from previous batch
                 x = x.to(self.device, non_blocking=True)

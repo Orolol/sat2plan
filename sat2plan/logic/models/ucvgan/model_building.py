@@ -221,6 +221,14 @@ class Generator(nn.Module):
         current = bottleneck
         for idx, block in enumerate(self.decoder):
             skip_connection = encoder_features[-(idx+1)]
+            # Ensure skip connection has same spatial dimensions
+            if current.shape[-2:] != skip_connection.shape[-2:]:
+                skip_connection = nn.functional.interpolate(
+                    skip_connection, 
+                    size=current.shape[-2:],
+                    mode='bilinear',
+                    align_corners=True
+                )
             current = torch.cat([current, skip_connection], dim=1)
             current = block['conv'](block['scale'](current))
         

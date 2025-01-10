@@ -321,10 +321,15 @@ class UCVGan():
                 print("Compiling models with torch.compile()...")
                 # Use inductor backend for H100
                 compile_config = {
-                    "mode": "max-autotune",
+                    "mode": "reduce-overhead",
                     "backend": "inductor",
-                    "fullgraph": True,
-                    "dynamic": False,
+                    "fullgraph": False,  # Changed to False to avoid CUDA graph issues
+                    "dynamic": True,  # Changed to True for more flexible execution
+                    "options": {
+                        "max_autotune": True,
+                        "epilogue_fusion": True,
+                        "max_fusion_size": 4,
+                    }
                 }
                 self.netG = torch.compile(self.netG, **compile_config)
                 self.netD = torch.compile(self.netD, **compile_config)
@@ -423,10 +428,12 @@ class UCVGan():
                     y = y.to(self.device, non_blocking=True)
                     total_images += current_batch_size
 
-                    # Générer les fausses images une seule fois par batch
-                    with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
+                    # Pre-compute fake images for both D and G updates
+                    with torch.cuda.amp.autocast():
+                        torch.compiler.cudagraph_mark_step_begin()  # Mark CUDA graph step
                         y_fake = self.netG(x)
-                        # Mise à jour du modèle EMA
+                        y_fake = y_fake.clone()  # Clone to prevent overwriting
+                        # Update EMA model
                         with torch.no_grad():
                             for ema_param, current_param in zip(self.generator_ema.parameters(), self.netG.parameters()):
                                 ema_param.data.mul_(self.beta_smoothing).add_(
@@ -434,67 +441,54 @@ class UCVGan():
                                 )
 
                     ############## Train Discriminator ##############
-                    # N'entraîner le discriminateur que toutes les n_critic itérations
+                    # Train discriminator every n_critic iterations
                     if idx % self.n_critic == 0:
+                        for p in self.netD.parameters():
+                            p.requires_grad = True
+                        
                         self.OptimizerD.zero_grad(set_to_none=True)
                         
-                        with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
-                            # Utiliser le générateur EMA pour le discriminateur
+                        with torch.cuda.amp.autocast():
+                            torch.compiler.cudagraph_mark_step_begin()  # Mark CUDA graph step
+                            # Use EMA generator for discriminator
                             with torch.no_grad():
                                 y_fake_ema = self.generator_ema(x)
+                                y_fake_ema = y_fake_ema.clone()  # Clone to prevent overwriting
                             
                             D_real = self.netD(x, y)
                             D_fake = self.netD(x, y_fake_ema.detach())
                             
-                            # Vérification des NaN
-                            if torch.isnan(D_real).any() or torch.isnan(D_fake).any():
-                                print(f"NaN detected in discriminator output at batch {idx}")
-                                continue
-                            
-                            real_label = torch.ones_like(D_real) * 0.9  # Label smoothing
-                            fake_label = torch.zeros_like(D_fake) + 0.1  # Label smoothing
+                            real_label = torch.ones_like(D_real) * 0.9
+                            fake_label = torch.zeros_like(D_fake) + 0.1
                             
                             D_real_loss = self.BCE_Loss(D_real + self.eps, real_label)
                             D_fake_loss = self.BCE_Loss(D_fake + self.eps, fake_label)
                             D_loss = (D_fake_loss + D_real_loss) / 2
                             
-                            # Gradient penalty déjà multiplié par lambda_gp dans la classe
                             gp = gradient_penalty(self.netD, y.detach(), y_fake_ema.detach(), x)
-                            # Clip moins agressif de la GP
                             gp = torch.clamp(gp, -2.0, 2.0)
                             D_loss_W = D_loss + gp
-                            
-                            # Vérification des NaN
-                            if torch.isnan(D_loss_W).any():
-                                print(f"NaN detected in discriminator loss at batch {idx}")
-                                continue
          
                         self.scaler.scale(D_loss_W).backward()
                         self.scaler.unscale_(self.OptimizerD)
                         torch.nn.utils.clip_grad_norm_(self.netD.parameters(), max_norm=self.max_grad_norm)
                         self.scaler.step(self.OptimizerD)
+                        
+                        # Disable discriminator gradients for generator update
+                        for p in self.netD.parameters():
+                            p.requires_grad = False
 
                     ############## Train Generator ##############
                     self.OptimizerG.zero_grad(set_to_none=True)
 
-                    with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
+                    with torch.cuda.amp.autocast():
+                        torch.compiler.cudagraph_mark_step_begin()  # Mark CUDA graph step
                         D_fake = self.netD(x, y_fake)
-                        
-                        # Vérification des NaN
-                        if torch.isnan(D_fake).any():
-                            print(f"NaN detected in generator output at batch {idx}")
-                            continue
-                            
                         G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
                         L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
                         G_loss = G_fake_loss * self.g_factor + L1
-                        
-                        # Vérification des NaN
-                        if torch.isnan(G_loss).any():
-                            print(f"NaN detected in generator loss at batch {idx}")
-                            continue
 
-                        # Gradient scaling adaptatif
+                        # Adaptive gradient scaling
                         scale = torch.max(torch.abs(G_loss)).item()
                         if scale > 1.0:
                             G_loss = G_loss / scale

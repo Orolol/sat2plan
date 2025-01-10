@@ -97,10 +97,16 @@ class UCVGan():
                 print(f"CUDA is available - Using GPU {self.rank}")
                 self.device = torch.device(f'cuda:{self.rank}')
                 
-                # Configuration CUDA pour les performances
+                # Force CUDA initialization
+                torch.cuda.init()
+                
+                # Configuration CUDA optimisée pour H100
                 torch.backends.cudnn.benchmark = True
                 torch.backends.cuda.matmul.allow_tf32 = True
                 torch.backends.cudnn.allow_tf32 = True
+                torch.backends.cuda.enable_mem_efficient_sdp(True)
+                torch.backends.cuda.enable_flash_sdp(True)
+                torch.backends.cuda.enable_math_sdp(True)
                 
                 # Configuration du processus distribué
                 if self.world_size > 1:
@@ -113,13 +119,18 @@ class UCVGan():
                         timeout=datetime.timedelta(minutes=30)
                     )
                 
-                # Pré-allocation de la mémoire CUDA
+                # Pré-allocation de la mémoire CUDA avec une stratégie plus agressive
                 torch.cuda.empty_cache()
                 total_memory = torch.cuda.get_device_properties(self.rank).total_memory
                 reserved_memory = int(total_memory * 0.95)  # Réserve 95% de la mémoire disponible
                 torch.cuda.set_per_process_memory_fraction(0.95, self.rank)
                 
+                # Pin memory for faster data transfer
+                torch.cuda.set_device(self.rank)
+                
                 print(f"GPU {self.rank}: Reserved {reserved_memory/1024**3:.1f}GB of VRAM")
+                print(f"CUDA Device: {torch.cuda.get_device_name(self.rank)}")
+                print(f"CUDA Capability: {torch.cuda.get_device_capability(self.rank)}")
             else:
                 print("CUDA not available - Using CPU")
                 self.device = torch.device("cpu")
@@ -166,40 +177,48 @@ class UCVGan():
             train_sampler = torch.utils.data.distributed.DistributedSampler(
                 self.train_dataset,
                 num_replicas=self.world_size,
-                rank=self.rank
+                rank=self.rank,
+                shuffle=True
             )
             val_sampler = torch.utils.data.distributed.DistributedSampler(
                 self.val_dataset,
                 num_replicas=self.world_size,
-                rank=self.rank
+                rank=self.rank,
+                shuffle=False
             )
         else:
             train_sampler = None
             val_sampler = None
 
-        # Create dataloaders
+        # Optimized DataLoader configuration for H100
+        dataloader_kwargs = {
+            'batch_size': self.batch_size,
+            'num_workers': self.num_workers,
+            'pin_memory': True,
+            'pin_memory_device': f'cuda:{self.rank}' if self.cuda else '',
+            'persistent_workers': True,
+            'prefetch_factor': 2,
+            'drop_last': True
+        }
+
+        # Create dataloaders with optimized settings
         self.train_dl = DataLoader(
             self.train_dataset,
-            batch_size=self.batch_size,
             shuffle=(train_sampler is None),
-            num_workers=self.num_workers,
-            pin_memory=True,
             sampler=train_sampler,
-            drop_last=True
+            **dataloader_kwargs
         )
 
         self.val_dl = DataLoader(
             self.val_dataset,
-            batch_size=self.batch_size,
             shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=True,
             sampler=val_sampler,
-            drop_last=True
+            **dataloader_kwargs
         )
 
         print(f"Train Data Loaded - {len(self.train_dataset)} images")
         print(f"Validation Data Loaded - {len(self.val_dataset)} images")
+        print(f"DataLoader workers: {self.num_workers}, prefetch factor: 2")
 
         return
 
@@ -261,7 +280,7 @@ class UCVGan():
         self.schedulerG = torch.optim.lr_scheduler.LambdaLR(self.OptimizerG, lr_lambda)
 
         # Compile models if using PyTorch 2.0+
-        if hasattr(torch, 'compile') and False:
+        if hasattr(torch, 'compile') and True:
             self.netG = torch.compile(self.netG)
             self.netD = torch.compile(self.netD)
             print("Models compiled with torch.compile()")

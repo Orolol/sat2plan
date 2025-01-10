@@ -216,6 +216,7 @@ class UCVGan():
         self.l1_lambda = 100.0  # Augmenté pour donner plus d'importance à la reconstruction
         self.lambda_gp = 10.0  # Augmenté pour une meilleure régularisation
         self.g_factor = 0.1  # Facteur pour la perte adversariale du générateur
+        self.max_grad_norm = 0.5  # Réduit la norme maximale des gradients
 
         # Setup distributed training if using CUDA
         if self.cuda and self.world_size > 1:
@@ -236,16 +237,18 @@ class UCVGan():
         self.OptimizerG = torch.optim.Adam(
             self.netG.parameters(), lr=self.learning_rate_G, betas=(self.beta1, self.beta2))
 
-        # Custom learning rate scheduler
+        # Custom learning rate scheduler avec un minimum pour éviter les instabilités
         total_epochs = self.n_epochs
         constant_epochs = total_epochs // 2
+        min_lr = 1e-6  # Learning rate minimum
         
         def lr_lambda(epoch):
             if epoch < constant_epochs:
                 return 1.0
             else:
-                # Linear decay from 1.0 to 0 in the second half
-                return 1.0 - (epoch - constant_epochs) / (total_epochs - constant_epochs)
+                # Linear decay from 1.0 to min_lr/base_lr in the second half
+                decay = 1.0 - (epoch - constant_epochs) / (total_epochs - constant_epochs)
+                return max(decay, min_lr)
         
         self.schedulerD = torch.optim.lr_scheduler.LambdaLR(self.OptimizerD, lr_lambda)
         self.schedulerG = torch.optim.lr_scheduler.LambdaLR(self.OptimizerG, lr_lambda)
@@ -361,6 +364,11 @@ class UCVGan():
                             D_real = self.netD(x, y)
                             D_fake = self.netD(x, y_fake.detach())
                             
+                            # Vérification des NaN
+                            if torch.isnan(D_real).any() or torch.isnan(D_fake).any():
+                                print(f"NaN detected in discriminator output at batch {idx}")
+                                continue
+                            
                             real_label = torch.ones_like(D_real) * 0.9  # Label smoothing
                             fake_label = torch.zeros_like(D_fake) + 0.1  # Label smoothing
                             
@@ -370,12 +378,18 @@ class UCVGan():
                             
                             # Gradient penalty déjà multiplié par lambda_gp dans la classe
                             gp = gradient_penalty(self.netD, y.detach(), y_fake.detach(), x)
-                            gp = torch.clamp(gp, -1.0, 1.0)  # Clip gradient penalty
+                            # Clip moins agressif de la GP
+                            gp = torch.clamp(gp, -2.0, 2.0)
                             D_loss_W = D_loss + gp
+                            
+                            # Vérification des NaN
+                            if torch.isnan(D_loss_W).any():
+                                print(f"NaN detected in discriminator loss at batch {idx}")
+                                continue
          
                         self.scaler.scale(D_loss_W).backward()
                         self.scaler.unscale_(self.OptimizerD)
-                        torch.nn.utils.clip_grad_norm_(self.netD.parameters(), max_norm=1.0)
+                        torch.nn.utils.clip_grad_norm_(self.netD.parameters(), max_norm=self.max_grad_norm)
                         self.scaler.step(self.OptimizerD)
 
                     ############## Train Generator ##############
@@ -383,13 +397,24 @@ class UCVGan():
 
                     with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
                         D_fake = self.netD(x, y_fake)
+                        
+                        # Vérification des NaN
+                        if torch.isnan(D_fake).any():
+                            print(f"NaN detected in generator output at batch {idx}")
+                            continue
+                            
                         G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
                         L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
-                        G_loss = G_fake_loss * self.g_factor + L1  # Réduction du poids de la perte adversariale
+                        G_loss = G_fake_loss * self.g_factor + L1
+                        
+                        # Vérification des NaN
+                        if torch.isnan(G_loss).any():
+                            print(f"NaN detected in generator loss at batch {idx}")
+                            continue
 
                         self.scaler.scale(G_loss).backward()
                         self.scaler.unscale_(self.OptimizerG)
-                        torch.nn.utils.clip_grad_norm_(self.netG.parameters(), max_norm=1.0)
+                        torch.nn.utils.clip_grad_norm_(self.netG.parameters(), max_norm=self.max_grad_norm)
                         self.scaler.step(self.OptimizerG)
                         self.scaler.update()
 

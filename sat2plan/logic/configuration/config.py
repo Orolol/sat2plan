@@ -44,7 +44,7 @@ class Global_Configuration:
         self.l1_lambda = 10.0
         self.lambda_gp = 0.1
 
-        self.load_model = True
+        self.load_model = False
         self.save_model = True
 
         self.checkpoint_disc = "disc.pth.tar"

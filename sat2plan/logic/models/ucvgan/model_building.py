@@ -144,16 +144,17 @@ class Generator(nn.Module):
 
         # Decoder blocks with skip connections and increased features
         self.decoder = nn.ModuleList()
+        current_features = features * 8  # On commence avec le même nombre de features que la sortie de l'encodeur
+        
         for i in range(self.n_blocks):
-            if i < 3:  # Premiers blocs
-                in_features = features * 16
-                out_features = features * 8
-            elif i < 4:  # Quatrième bloc
-                in_features = features * 12
-                out_features = features * 4
-            else:  # Derniers blocs
-                in_features = features * 6
-                out_features = features * 2
+            # Le nombre de features en entrée est doublé à cause de la skip connection
+            in_features = current_features * 2
+            
+            # On réduit progressivement le nombre de features
+            if i < self.n_blocks - 2:
+                out_features = current_features  # Maintient le même nombre de features pour les premiers blocs
+            else:
+                out_features = current_features // 2  # Réduit le nombre de features pour les derniers blocs
             
             self.decoder.append(
                 nn.ModuleDict({
@@ -161,6 +162,7 @@ class Generator(nn.Module):
                     'conv': UVCCNNlock(in_features, out_features, down=False)
                 })
             )
+            current_features = out_features
 
         # Final upsampling avec plus de couches
         self.final_up = nn.Sequential(

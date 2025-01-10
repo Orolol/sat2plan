@@ -162,7 +162,14 @@ class Generator(nn.Module):
                         nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
                         nn.Conv2d(in_features, in_features, kernel_size=3, stride=1, padding=1, padding_mode="reflect")
                     ),
-                    'conv': UVCCNNlock(in_features, out_features, down=False)
+                    'conv': nn.Sequential(
+                        nn.Conv2d(in_features, out_features, kernel_size=3, stride=1, padding=1, padding_mode="reflect"),
+                        nn.InstanceNorm2d(out_features),
+                        nn.LeakyReLU(0.2, inplace=True),
+                        nn.Conv2d(out_features, out_features, kernel_size=3, stride=1, padding=1, padding_mode="reflect"),
+                        nn.InstanceNorm2d(out_features),
+                        nn.LeakyReLU(0.2, inplace=True)
+                    )
                 })
             )
             current_features = out_features

@@ -316,7 +316,7 @@ class UCVGan():
         self.schedulerG = torch.optim.lr_scheduler.LambdaLR(self.OptimizerG, lr_lambda)
 
         # Compile models if using PyTorch 2.0+
-        if hasattr(torch, 'compile') and False:
+        if hasattr(torch, 'compile'):
             try:
                 print("Compiling models with torch.compile()...")
                 # Use inductor backend for H100

@@ -90,7 +90,7 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, kernel_size=3, stride=1, padding=1, in_channels=3, features=64):
+    def __init__(self, kernel_size=3, stride=1, padding=1, in_channels=3, features=96):
         super().__init__()
         
         # Initial downsampling avec normalisation

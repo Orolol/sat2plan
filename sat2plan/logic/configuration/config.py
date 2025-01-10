@@ -29,7 +29,7 @@ class Global_Configuration:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.train_dir = "./data/split/train"
         self.val_dir = "./data/split/val"
-        self.data_bucket = 'data-10k'
+        self.data_bucket = 'data-full'
 
         self.n_cpu = 6
 

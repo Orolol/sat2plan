@@ -158,7 +158,10 @@ class Generator(nn.Module):
             
             self.decoder.append(
                 nn.ModuleDict({
-                    'scale': UpsamplingBlock(in_features, in_features),
+                    'scale': nn.Sequential(
+                        nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
+                        nn.Conv2d(in_features, in_features, kernel_size=3, stride=1, padding=1, padding_mode="reflect")
+                    ),
                     'conv': UVCCNNlock(in_features, out_features, down=False)
                 })
             )

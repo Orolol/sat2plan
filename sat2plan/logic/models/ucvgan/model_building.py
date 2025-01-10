@@ -193,7 +193,8 @@ class Generator(nn.Module):
         encoder_features = []
         current = d1
         for block in self.encoder:
-            current = block['scale'](block['conv'](current))
+            current = block['conv'](current)
+            current = block['scale'](current)
             encoder_features.append(current)
         
         # Bottleneck
@@ -211,8 +212,12 @@ class Generator(nn.Module):
                     mode='bilinear',
                     align_corners=True
                 )
+            # Concaténation
             current = torch.cat([current, skip_connection], dim=1)
-            current = block['conv'](block['scale'](current))
+            # Upsampling sur le résultat concaténé
+            current = block['scale'](current)
+            # Convolution sur le résultat
+            current = block['conv'](current)
         
         # Final upsampling
         result = self.final_up(current)

@@ -37,11 +37,8 @@ class ResidualBlock(nn.Module):
         return out
 
 class Discriminator(nn.Module):
-    def __init__(self, in_channels=3, input_size=256):
+    def __init__(self, in_channels=3):
         super().__init__()
-        
-        # Calculate number of downsampling steps needed
-        self.n_blocks = max(3, (input_size // 256) + 2)  # 3 blocks for 256x256, 4 for 512x512, etc.
         
         self.initial = nn.Sequential(
             nn.Conv2d(in_channels*2, 32, kernel_size=4, stride=2, padding=1, padding_mode="reflect", bias=False),
@@ -49,28 +46,26 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(0.2, inplace=True)
         )
         
-        # Dynamic feature extraction blocks
-        self.features = nn.ModuleList()
-        current_channels = 32
-        for i in range(self.n_blocks):
-            out_channels = min(256, current_channels * 2)  # Cap at 256 channels
-            self.features.append(
-                nn.Sequential(
-                    ResidualBlock(current_channels, out_channels),
-                    nn.AvgPool2d(2),
-                    ResidualBlock(out_channels, out_channels)
-                )
-            )
-            current_channels = out_channels
+        self.layer1 = nn.Sequential(
+            ResidualBlock(32, 64, stride=2),
+            ResidualBlock(64, 64)
+        )
         
-        # Adaptive pooling to handle any input size
-        self.adaptive_pool = nn.AdaptiveAvgPool2d((8, 8))
+        self.layer2 = nn.Sequential(
+            ResidualBlock(64, 128, stride=2),
+            ResidualBlock(128, 128)
+        )
+        
+        self.layer3 = nn.Sequential(
+            ResidualBlock(128, 256, stride=2),
+            ResidualBlock(256, 256)
+        )
         
         self.final = nn.Sequential(
-            nn.Conv2d(current_channels, current_channels, kernel_size=3, stride=1, padding=1, padding_mode="reflect", bias=False),
-            nn.InstanceNorm2d(current_channels, affine=True),
+            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, padding_mode="reflect", bias=False),
+            nn.InstanceNorm2d(256, affine=True),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(current_channels, 1, kernel_size=3, stride=1, padding=1, padding_mode="reflect")
+            nn.Conv2d(256, 1, kernel_size=3, stride=1, padding=1, padding_mode="reflect")
         )
         
         for m in self.modules():
@@ -83,14 +78,9 @@ class Discriminator(nn.Module):
     def forward(self, x, y):
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
-        
-        # Apply feature extraction blocks
-        for block in self.features:
-            x = block(x)
-        
-        # Adaptive pooling to fixed size
-        x = self.adaptive_pool(x)
-        
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
         return self.final(x)
 
 
@@ -100,85 +90,91 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, kernel_size=3, stride=1, padding=1, in_channels=3, features=64, input_size=256):
+    def __init__(self, kernel_size=3, stride=1, padding=1, in_channels=3, features=96):
         super().__init__()
-        
-        # Calculate number of encoder blocks needed
-        self.n_blocks = max(5, (input_size // 256) + 4)  # 5 blocks for 256x256, 6 for 512x512, etc.
-        final_size = input_size // (2 ** self.n_blocks)  # Size after all encoder blocks
         
         # Initial downsampling avec normalisation
         self.initial_down = nn.Sequential(
             nn.Conv2d(in_channels, features, kernel_size, stride, padding, padding_mode="reflect", bias=False),
             nn.InstanceNorm2d(features, affine=True),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(features, features, kernel_size, stride, padding, padding_mode="reflect", bias=False),
-            nn.InstanceNorm2d(features, affine=True),
-            nn.LeakyReLU(0.2, inplace=True)
+            # nn.Conv2d(features, features, kernel_size, stride, padding, padding_mode="reflect", bias=False),
+            # nn.InstanceNorm2d(features, affine=True),
+            # nn.LeakyReLU(0.2, inplace=True)
         )
 
         # Encoder blocks with increased feature sizes
-        self.encoder = nn.ModuleList()
-        current_features = features
-        for i in range(self.n_blocks):
-            out_features = min(features * 8, current_features * 2)  # Cap at features * 8
-            self.encoder.append(
-                nn.ModuleDict({
-                    'conv': UVCCNNlock(current_features, out_features, down=True),
-                    'scale': DownsamplingBlock(out_features, out_features)
-                })
-            )
-            current_features = out_features
+        self.encoder = nn.ModuleList([
+            # Block 1: (B, 64, 256, 256) -> (B, 128, 128, 128)
+            nn.ModuleDict({
+                'conv': UVCCNNlock(features, features*2, down=True),
+                'scale': DownsamplingBlock(features*2, features*2)
+            }),
+            # Block 2: (B, 128, 128, 128) -> (B, 256, 64, 64)
+            nn.ModuleDict({
+                'conv': UVCCNNlock(features*2, features*4, down=True),
+                'scale': DownsamplingBlock(features*4, features*4)
+            }),
+            # Block 3: (B, 256, 64, 64) -> (B, 512, 32, 32)
+            nn.ModuleDict({
+                'conv': UVCCNNlock(features*4, features*8, down=True),
+                'scale': DownsamplingBlock(features*8, features*8)
+            }),
+            # Block 4: (B, 512, 32, 32) -> (B, 512, 16, 16)
+            nn.ModuleDict({
+                'conv': UVCCNNlock(features*8, features*8, down=True),
+                'scale': DownsamplingBlock(features*8, features*8)
+            }),
+            # Block 5: (B, 512, 16, 16) -> (B, 512, 8, 8)
+            nn.ModuleDict({
+                'conv': UVCCNNlock(features*8, features*8, down=True),
+                'scale': DownsamplingBlock(features*8, features*8)
+            })
+        ])
 
         # Bottleneck with increased attention heads and blocks
         self.bottleneck = PixelwiseViT(
-            features * 8,  # input features
-            16,           # n_heads
-            12,           # n_blocks
-            2048,         # ffn_features
-            features * 8, # embed_features
-            image_shape=(features * 8, final_size, final_size),  # shape après l'encodeur
+            features * 8, 16, 12, 2048,  # Plus de têtes d'attention et de blocs
+            features * 8,
+            image_shape=(features * 8, 8, 8),
             rezero=True,
-            dropout=0.1
+            dropout=0.1  # Ajout de dropout pour régularisation
         )
 
         # Decoder blocks with skip connections and increased features
-        self.decoder = nn.ModuleList()
-        current_features = features * 8  # On commence avec le même nombre de features que la sortie de l'encodeur
-        
-        for i in range(self.n_blocks):
-            # Le nombre de features en entrée est doublé à cause de la skip connection
-            in_features = current_features * 2
-            
-            # On réduit progressivement le nombre de features
-            if i < self.n_blocks - 2:
-                out_features = current_features  # Maintient le même nombre de features pour les premiers blocs
-            else:
-                out_features = current_features // 2  # Réduit le nombre de features pour les derniers blocs
-            
-            self.decoder.append(
-                nn.ModuleDict({
-                    'scale': nn.Sequential(
-                        nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-                        nn.Conv2d(in_features, in_features, kernel_size=3, stride=1, padding=1, padding_mode="reflect")
-                    ),
-                    'conv': nn.Sequential(
-                        nn.Conv2d(in_features, out_features, kernel_size=3, stride=1, padding=1, padding_mode="reflect"),
-                        nn.InstanceNorm2d(out_features),
-                        nn.LeakyReLU(0.2, inplace=True),
-                        nn.Conv2d(out_features, out_features, kernel_size=3, stride=1, padding=1, padding_mode="reflect"),
-                        nn.InstanceNorm2d(out_features),
-                        nn.LeakyReLU(0.2, inplace=True)
-                    )
-                })
-            )
-            current_features = out_features
+        self.decoder = nn.ModuleList([
+            # Block 1: (B, 1024, 8, 8) -> (B, 512, 16, 16)
+            nn.ModuleDict({
+                'scale': UpsamplingBlock(features*16, features*16),
+                'conv': UVCCNNlock(features*16, features*8, down=False)
+            }),
+            # Block 2: (B, 1024, 16, 16) -> (B, 512, 32, 32)
+            nn.ModuleDict({
+                'scale': UpsamplingBlock(features*16, features*16),
+                'conv': UVCCNNlock(features*16, features*8, down=False)
+            }),
+            # Block 3: (B, 1024, 32, 32) -> (B, 512, 64, 64)
+            nn.ModuleDict({
+                'scale': UpsamplingBlock(features*16, features*16),
+                'conv': UVCCNNlock(features*16, features*8, down=False)
+            }),
+            # Block 4: (B, 768, 64, 64) -> (B, 256, 128, 128)
+            nn.ModuleDict({
+                'scale': UpsamplingBlock(features*12, features*12),
+                'conv': UVCCNNlock(features*12, features*4, down=False)
+            }),
+            # Block 5: (B, 384, 128, 128) -> (B, 128, 256, 256)
+            nn.ModuleDict({
+                'scale': UpsamplingBlock(features*6, features*6),
+                'conv': UVCCNNlock(features*6, features*2, down=False)
+            })
+        ])
 
         # Final upsampling avec plus de couches
         self.final_up = nn.Sequential(
-            nn.Conv2d(features * 2, features, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.InstanceNorm2d(features, affine=True),
-            nn.LeakyReLU(0.2, inplace=True),
+            # nn.Conv2d(features * 2, features, kernel_size=3, stride=1, padding=1, bias=False),
+            # nn.InstanceNorm2d(features, affine=True),
+            # nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1, bias=False),
             nn.InstanceNorm2d(features // 2, affine=True),
             nn.LeakyReLU(0.2, inplace=True),
@@ -203,8 +199,7 @@ class Generator(nn.Module):
         encoder_features = []
         current = d1
         for block in self.encoder:
-            current = block['conv'](current)
-            current = block['scale'](current)
+            current = block['scale'](block['conv'](current))
             encoder_features.append(current)
         
         # Bottleneck
@@ -214,20 +209,8 @@ class Generator(nn.Module):
         current = bottleneck
         for idx, block in enumerate(self.decoder):
             skip_connection = encoder_features[-(idx+1)]
-            # Ensure skip connection has same spatial dimensions
-            if current.shape[-2:] != skip_connection.shape[-2:]:
-                skip_connection = nn.functional.interpolate(
-                    skip_connection, 
-                    size=current.shape[-2:],
-                    mode='bilinear',
-                    align_corners=True
-                )
-            # Concaténation
             current = torch.cat([current, skip_connection], dim=1)
-            # Upsampling sur le résultat concaténé
-            current = block['scale'](current)
-            # Convolution sur le résultat
-            current = block['conv'](current)
+            current = block['conv'](block['scale'](current))
         
         # Final upsampling
         result = self.final_up(current)

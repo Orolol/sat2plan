@@ -92,48 +92,64 @@ class UCVGan():
 
     def setup_device(self):
         try:
+            # Diagnostic PyTorch/CUDA
+            print(f"PyTorch version: {torch.__version__}")
+            print(f"CUDA available: {torch.cuda.is_available()}")
+            print(f"CUDA version: {torch.version.cuda}")
+            print(f"Compiled with CUDA: {torch.backends.cudnn.enabled}")
+            
             self.cuda = torch.cuda.is_available()
-            if self.cuda:
-                print(f"CUDA is available - Using GPU {self.rank}")
-                self.device = torch.device(f'cuda:{self.rank}')
-                
-                # Force CUDA initialization
-                torch.cuda.init()
-                
-                # Configuration CUDA optimisée pour H100
-                torch.backends.cudnn.benchmark = True
-                torch.backends.cuda.matmul.allow_tf32 = True
-                torch.backends.cudnn.allow_tf32 = True
-                torch.backends.cuda.enable_mem_efficient_sdp(True)
-                torch.backends.cuda.enable_flash_sdp(True)
-                torch.backends.cuda.enable_math_sdp(True)
-                
-                # Configuration du processus distribué
-                if self.world_size > 1:
-                    os.environ['MASTER_ADDR'] = 'localhost'
-                    os.environ['MASTER_PORT'] = '12355'
-                    dist.init_process_group(
-                        "nccl", 
-                        rank=self.rank, 
-                        world_size=self.world_size,
-                        timeout=datetime.timedelta(minutes=30)
-                    )
-                
-                # Pré-allocation de la mémoire CUDA avec une stratégie plus agressive
-                torch.cuda.empty_cache()
-                total_memory = torch.cuda.get_device_properties(self.rank).total_memory
-                reserved_memory = int(total_memory * 0.95)  # Réserve 95% de la mémoire disponible
-                torch.cuda.set_per_process_memory_fraction(0.95, self.rank)
-                
-                # Pin memory for faster data transfer
-                torch.cuda.set_device(self.rank)
-                
-                print(f"GPU {self.rank}: Reserved {reserved_memory/1024**3:.1f}GB of VRAM")
-                print(f"CUDA Device: {torch.cuda.get_device_name(self.rank)}")
-                print(f"CUDA Capability: {torch.cuda.get_device_capability(self.rank)}")
-            else:
-                print("CUDA not available - Using CPU")
-                self.device = torch.device("cpu")
+            if not self.cuda:
+                raise RuntimeError("CUDA is required but not available. Please check your PyTorch installation.")
+            
+            print(f"CUDA is available - Using GPU {self.rank}")
+            self.device = torch.device(f'cuda:{self.rank}')
+            
+            # Force CUDA initialization and set device
+            torch.cuda.init()
+            torch.cuda.set_device(self.rank)
+            
+            # Force some tensor operations to ensure CUDA is initialized
+            dummy_tensor = torch.ones(1, device=self.device)
+            dummy_tensor = dummy_tensor * 2
+            del dummy_tensor
+            
+            # Configuration CUDA optimisée pour H100
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            torch.backends.cudnn.enabled = True
+            torch.backends.cuda.enable_mem_efficient_sdp(True)
+            torch.backends.cuda.enable_flash_sdp(True)
+            torch.backends.cuda.enable_math_sdp(True)
+            
+            # Configuration du processus distribué
+            if self.world_size > 1:
+                os.environ['MASTER_ADDR'] = 'localhost'
+                os.environ['MASTER_PORT'] = '12355'
+                dist.init_process_group(
+                    "nccl", 
+                    rank=self.rank, 
+                    world_size=self.world_size,
+                    timeout=datetime.timedelta(minutes=30)
+                )
+            
+            # Pré-allocation de la mémoire CUDA avec une stratégie plus agressive
+            torch.cuda.empty_cache()
+            total_memory = torch.cuda.get_device_properties(self.rank).total_memory
+            reserved_memory = int(total_memory * 0.95)
+            torch.cuda.set_per_process_memory_fraction(0.95, self.rank)
+            
+            print(f"GPU {self.rank}: Reserved {reserved_memory/1024**3:.1f}GB of VRAM")
+            print(f"CUDA Device: {torch.cuda.get_device_name(self.rank)}")
+            print(f"CUDA Capability: {torch.cuda.get_device_capability(self.rank)}")
+            print(f"Current device: {torch.cuda.current_device()}")
+            print(f"Device properties: {torch.cuda.get_device_properties(self.rank)}")
+            
+            # Verify CUDA is working
+            test_tensor = torch.cuda.FloatTensor(2, 2).fill_(1.0)
+            print(f"Test tensor device: {test_tensor.device}")
+            
         except Exception as e:
             print(f"Error in setup_device for process {self.rank}: {str(e)}")
             raise
@@ -225,17 +241,24 @@ class UCVGan():
     # Create models, optimizers ans losses
 
     def create_models(self):
-        # Initialize models
-        self.netD = Discriminator(in_channels=3).to(self.device)
-        self.netG = Generator(in_channels=3).to(self.device)
+        # Initialize models and force them to GPU
+        self.netD = Discriminator(in_channels=3)
+        self.netG = Generator(in_channels=3)
+        
+        # Explicitly move models to GPU and verify
+        self.netD = self.netD.to(self.device)
+        self.netG = self.netG.to(self.device)
+        print(f"Generator device: {next(self.netG.parameters()).device}")
+        print(f"Discriminator device: {next(self.netD.parameters()).device}")
+        
         self.starting_epoch = 0
         
         # Paramètres d'équilibrage
-        self.n_critic = 5  # Nombre d'itérations du générateur pour une du discriminateur
-        self.l1_lambda = 100.0  # Augmenté pour donner plus d'importance à la reconstruction
-        self.lambda_gp = 10.0  # Augmenté pour une meilleure régularisation
-        self.g_factor = 0.05  # Réduit pour plus de stabilité
-        self.max_grad_norm = 0.1  # Réduit drastiquement pour éviter les explosions
+        self.n_critic = 5
+        self.l1_lambda = 100.0
+        self.lambda_gp = 10.0
+        self.g_factor = 0.05
+        self.max_grad_norm = 0.1
         
         # Gradient smoothing
         self.beta_smoothing = 0.999
@@ -250,29 +273,42 @@ class UCVGan():
             self.netG = nn.SyncBatchNorm.convert_sync_batchnorm(self.netG)
             self.netD = nn.SyncBatchNorm.convert_sync_batchnorm(self.netD)
             
-            # Wrap models in DistributedDataParallel
-            self.netG = nn.parallel.DistributedDataParallel(
-                self.netG, device_ids=[self.rank], output_device=self.rank)
-            self.netD = nn.parallel.DistributedDataParallel(
-                self.netD, device_ids=[self.rank], output_device=self.rank)
+            # Wrap models in DistributedDataParallel with specific H100 settings
+            ddp_kwargs = {
+                'device_ids': [self.rank],
+                'output_device': self.rank,
+                'find_unused_parameters': False,
+                'gradient_as_bucket_view': True,
+                'static_graph': True
+            }
+            
+            self.netG = nn.parallel.DistributedDataParallel(self.netG, **ddp_kwargs)
+            self.netD = nn.parallel.DistributedDataParallel(self.netD, **ddp_kwargs)
             print(f"Models wrapped in DistributedDataParallel on GPU {self.rank}")
 
         # Initialize optimizers with full learning rate
         self.OptimizerD = torch.optim.Adam(
-            self.netD.parameters(), lr=self.learning_rate_D * 0.05, betas=(self.beta1, 0.999))  # LR encore plus réduit pour D
+            self.netD.parameters(), 
+            lr=self.learning_rate_D * 0.05, 
+            betas=(self.beta1, 0.999),
+            fused=True  # Use fused Adam implementation for better performance
+        )
         self.OptimizerG = torch.optim.Adam(
-            self.netG.parameters(), lr=self.learning_rate_G * 0.5, betas=(self.beta1, 0.999))  # LR réduit pour G
+            self.netG.parameters(), 
+            lr=self.learning_rate_G * 0.5, 
+            betas=(self.beta1, 0.999),
+            fused=True
+        )
 
         # Custom learning rate scheduler avec un minimum pour éviter les instabilités
         total_epochs = self.n_epochs
         constant_epochs = total_epochs // 2
-        min_lr = 1e-6  # Learning rate minimum
+        min_lr = 1e-6
         
         def lr_lambda(epoch):
             if epoch < constant_epochs:
                 return 1.0
             else:
-                # Linear decay from 1.0 to min_lr/base_lr in the second half
                 decay = 1.0 - (epoch - constant_epochs) / (total_epochs - constant_epochs)
                 return max(decay, min_lr)
         
@@ -280,10 +316,22 @@ class UCVGan():
         self.schedulerG = torch.optim.lr_scheduler.LambdaLR(self.OptimizerG, lr_lambda)
 
         # Compile models if using PyTorch 2.0+
-        if hasattr(torch, 'compile') and True:
-            self.netG = torch.compile(self.netG)
-            self.netD = torch.compile(self.netD)
-            print("Models compiled with torch.compile()")
+        if hasattr(torch, 'compile'):
+            try:
+                print("Compiling models with torch.compile()...")
+                # Use inductor backend for H100
+                compile_config = {
+                    "mode": "max-autotune",
+                    "backend": "inductor",
+                    "fullgraph": True,
+                    "dynamic": False,
+                }
+                self.netG = torch.compile(self.netG, **compile_config)
+                self.netD = torch.compile(self.netD, **compile_config)
+                print("Models successfully compiled")
+            except Exception as e:
+                print(f"Warning: Model compilation failed: {e}")
+                print("Continuing without compilation")
 
         # Load model and optimizer states if requested
         if self.load_model:
@@ -301,9 +349,9 @@ class UCVGan():
                 self.starting_epoch = 0
 
         # Initialize losses and metrics tracking
-        self.scaler = torch.amp.GradScaler()  # For mixed precision training
-        self.BCE_Loss = nn.BCEWithLogitsLoss()
-        self.L1_Loss = nn.L1Loss()
+        self.scaler = torch.amp.GradScaler(enabled=True)  # Enable mixed precision
+        self.BCE_Loss = nn.BCEWithLogitsLoss().to(self.device)
+        self.L1_Loss = nn.L1Loss().to(self.device)
         
         # Initialize loss history lists
         self.Gen_loss = []
@@ -319,8 +367,6 @@ class UCVGan():
         self.best_loss = float('inf')
         self.patience = 15
         self.patience_counter = 0
-
-        # Add small epsilon for numerical stability
         self.eps = 1e-8
 
         return

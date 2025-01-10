@@ -261,7 +261,7 @@ class UCVGan():
         self.schedulerG = torch.optim.lr_scheduler.LambdaLR(self.OptimizerG, lr_lambda)
 
         # Compile models if using PyTorch 2.0+
-        if hasattr(torch, 'compile'):
+        if hasattr(torch, 'compile') and False:
             self.netG = torch.compile(self.netG)
             self.netD = torch.compile(self.netD)
             print("Models compiled with torch.compile()")

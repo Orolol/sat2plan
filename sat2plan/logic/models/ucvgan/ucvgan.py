@@ -109,27 +109,19 @@ class UCVGan():
             torch.cuda.init()
             torch.cuda.set_device(self.rank)
             
-            # H100-specific optimizations
-            torch.backends.cuda.matmul.allow_tf32 = True
-            torch.backends.cudnn.allow_tf32 = True
-            torch.backends.cudnn.benchmark = True
-            torch.backends.cudnn.enabled = True
-            torch.backends.cuda.enable_mem_efficient_sdp(True)
-            torch.backends.cuda.enable_flash_sdp(True)
-            torch.backends.cuda.enable_math_sdp(True)
-            
-            # Set memory allocation strategy for H100
-            torch.cuda.set_per_process_memory_fraction(0.95, self.rank)
-            torch.cuda.empty_cache()
-            
-            # Enable async memory allocation
-            torch.cuda.set_device(self.rank)
-            torch.cuda.memory.set_per_process_memory_fraction(0.95)
-            
             # Force some tensor operations to ensure CUDA is initialized
             dummy_tensor = torch.ones(1, device=self.device)
             dummy_tensor = dummy_tensor * 2
             del dummy_tensor
+            
+            # Configuration CUDA optimisée pour H100
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            torch.backends.cudnn.enabled = True
+            torch.backends.cuda.enable_mem_efficient_sdp(True)
+            torch.backends.cuda.enable_flash_sdp(True)
+            torch.backends.cuda.enable_math_sdp(True)
             
             # Configuration du processus distribué
             if self.world_size > 1:
@@ -146,6 +138,7 @@ class UCVGan():
             torch.cuda.empty_cache()
             total_memory = torch.cuda.get_device_properties(self.rank).total_memory
             reserved_memory = int(total_memory * 0.95)
+            torch.cuda.set_per_process_memory_fraction(0.95, self.rank)
             
             print(f"GPU {self.rank}: Reserved {reserved_memory/1024**3:.1f}GB of VRAM")
             print(f"CUDA Device: {torch.cuda.get_device_name(self.rank)}")
@@ -153,12 +146,9 @@ class UCVGan():
             print(f"Current device: {torch.cuda.current_device()}")
             print(f"Device properties: {torch.cuda.get_device_properties(self.rank)}")
             
-            # Verify CUDA is working with a larger test
-            test_tensor = torch.randn(1024, 1024, device=self.device)
-            test_result = torch.matmul(test_tensor, test_tensor)
-            torch.cuda.synchronize()  # Force synchronization
-            print(f"CUDA test tensor computation completed on device: {test_result.device}")
-            del test_tensor, test_result
+            # Verify CUDA is working
+            test_tensor = torch.cuda.FloatTensor(2, 2).fill_(1.0)
+            print(f"Test tensor device: {test_tensor.device}")
             
         except Exception as e:
             print(f"Error in setup_device for process {self.rank}: {str(e)}")
@@ -219,13 +209,12 @@ class UCVGan():
         # Optimized DataLoader configuration for H100
         dataloader_kwargs = {
             'batch_size': self.batch_size,
-            'num_workers': min(self.num_workers, 8),  # Limit workers for H100
+            'num_workers': self.num_workers,
             'pin_memory': True,
             'pin_memory_device': f'cuda:{self.rank}' if self.cuda else '',
             'persistent_workers': True,
-            'prefetch_factor': 4,  # Increased prefetch factor
-            'drop_last': True,
-            'generator': torch.Generator(device='cuda' if self.cuda else 'cpu')
+            'prefetch_factor': 2,
+            'drop_last': True
         }
 
         # Create dataloaders with optimized settings
@@ -245,7 +234,7 @@ class UCVGan():
 
         print(f"Train Data Loaded - {len(self.train_dataset)} images")
         print(f"Validation Data Loaded - {len(self.val_dataset)} images")
-        print(f"DataLoader workers: {dataloader_kwargs['num_workers']}, prefetch factor: {dataloader_kwargs['prefetch_factor']}")
+        print(f"DataLoader workers: {self.num_workers}, prefetch factor: 2")
 
         return
 
@@ -429,15 +418,15 @@ class UCVGan():
                     num_batches += 1
                     current_batch_size = x.size(0)
                     
-                    # Move data to appropriate device and use non_blocking=True
+                    # Move data to appropriate device
                     x = x.to(self.device, non_blocking=True)
                     y = y.to(self.device, non_blocking=True)
                     total_images += current_batch_size
 
-                    # Pre-compute fake images for both D and G updates
-                    with torch.cuda.amp.autocast():
+                    # Générer les fausses images une seule fois par batch
+                    with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
                         y_fake = self.netG(x)
-                        # Update EMA model
+                        # Mise à jour du modèle EMA
                         with torch.no_grad():
                             for ema_param, current_param in zip(self.generator_ema.parameters(), self.netG.parameters()):
                                 ema_param.data.mul_(self.beta_smoothing).add_(
@@ -445,64 +434,76 @@ class UCVGan():
                                 )
 
                     ############## Train Discriminator ##############
-                    # Train discriminator every n_critic iterations
+                    # N'entraîner le discriminateur que toutes les n_critic itérations
                     if idx % self.n_critic == 0:
-                        for p in self.netD.parameters():
-                            p.requires_grad = True
-                        
                         self.OptimizerD.zero_grad(set_to_none=True)
                         
-                        with torch.cuda.amp.autocast():
-                            # Use EMA generator for discriminator
+                        with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
+                            # Utiliser le générateur EMA pour le discriminateur
                             with torch.no_grad():
                                 y_fake_ema = self.generator_ema(x)
                             
                             D_real = self.netD(x, y)
                             D_fake = self.netD(x, y_fake_ema.detach())
                             
-                            real_label = torch.ones_like(D_real) * 0.9
-                            fake_label = torch.zeros_like(D_fake) + 0.1
+                            # Vérification des NaN
+                            if torch.isnan(D_real).any() or torch.isnan(D_fake).any():
+                                print(f"NaN detected in discriminator output at batch {idx}")
+                                continue
+                            
+                            real_label = torch.ones_like(D_real) * 0.9  # Label smoothing
+                            fake_label = torch.zeros_like(D_fake) + 0.1  # Label smoothing
                             
                             D_real_loss = self.BCE_Loss(D_real + self.eps, real_label)
                             D_fake_loss = self.BCE_Loss(D_fake + self.eps, fake_label)
                             D_loss = (D_fake_loss + D_real_loss) / 2
                             
+                            # Gradient penalty déjà multiplié par lambda_gp dans la classe
                             gp = gradient_penalty(self.netD, y.detach(), y_fake_ema.detach(), x)
+                            # Clip moins agressif de la GP
                             gp = torch.clamp(gp, -2.0, 2.0)
                             D_loss_W = D_loss + gp
+                            
+                            # Vérification des NaN
+                            if torch.isnan(D_loss_W).any():
+                                print(f"NaN detected in discriminator loss at batch {idx}")
+                                continue
          
                         self.scaler.scale(D_loss_W).backward()
                         self.scaler.unscale_(self.OptimizerD)
                         torch.nn.utils.clip_grad_norm_(self.netD.parameters(), max_norm=self.max_grad_norm)
                         self.scaler.step(self.OptimizerD)
-                        
-                        # Disable discriminator gradients for generator update
-                        for p in self.netD.parameters():
-                            p.requires_grad = False
 
                     ############## Train Generator ##############
                     self.OptimizerG.zero_grad(set_to_none=True)
 
-                    with torch.cuda.amp.autocast():
+                    with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
                         D_fake = self.netD(x, y_fake)
+                        
+                        # Vérification des NaN
+                        if torch.isnan(D_fake).any():
+                            print(f"NaN detected in generator output at batch {idx}")
+                            continue
+                            
                         G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
                         L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
                         G_loss = G_fake_loss * self.g_factor + L1
+                        
+                        # Vérification des NaN
+                        if torch.isnan(G_loss).any():
+                            print(f"NaN detected in generator loss at batch {idx}")
+                            continue
 
-                        # Adaptive gradient scaling
+                        # Gradient scaling adaptatif
                         scale = torch.max(torch.abs(G_loss)).item()
                         if scale > 1.0:
                             G_loss = G_loss / scale
 
-                    self.scaler.scale(G_loss).backward()
-                    self.scaler.unscale_(self.OptimizerG)
-                    torch.nn.utils.clip_grad_norm_(self.netG.parameters(), max_norm=self.max_grad_norm)
-                    self.scaler.step(self.OptimizerG)
-                    self.scaler.update()
-
-                    # Force CUDA synchronization periodically
-                    if idx % 10 == 0:
-                        torch.cuda.synchronize()
+                        self.scaler.scale(G_loss).backward()
+                        self.scaler.unscale_(self.OptimizerG)
+                        torch.nn.utils.clip_grad_norm_(self.netG.parameters(), max_norm=self.max_grad_norm)
+                        self.scaler.step(self.OptimizerG)
+                        self.scaler.update()
 
                     # Accumulate losses
                     epoch_d_loss += D_loss_W.item()

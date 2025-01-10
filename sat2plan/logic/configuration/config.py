@@ -37,7 +37,7 @@ class Global_Configuration:
         self.n_epochs = 200
         self.sample_interval = 10
 
-        self.image_size = 512
+        self.image_size = 256
         self.channels_img = 3
 
         self.num_workers = 2

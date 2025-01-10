@@ -37,8 +37,11 @@ class ResidualBlock(nn.Module):
         return out
 
 class Discriminator(nn.Module):
-    def __init__(self, in_channels=3):
+    def __init__(self, in_channels=3, input_size=256):
         super().__init__()
+        
+        # Calculate number of downsampling steps needed
+        self.n_blocks = max(3, (input_size // 256) + 2)  # 3 blocks for 256x256, 4 for 512x512, etc.
         
         self.initial = nn.Sequential(
             nn.Conv2d(in_channels*2, 32, kernel_size=4, stride=2, padding=1, padding_mode="reflect", bias=False),
@@ -47,32 +50,27 @@ class Discriminator(nn.Module):
         )
         
         # Dynamic feature extraction blocks
-        self.features = nn.ModuleList([
-            nn.Sequential(
-                ResidualBlock(32, 64),
-                nn.AvgPool2d(2),
-                ResidualBlock(64, 64)
-            ),
-            nn.Sequential(
-                ResidualBlock(64, 128),
-                nn.AvgPool2d(2),
-                ResidualBlock(128, 128)
-            ),
-            nn.Sequential(
-                ResidualBlock(128, 256),
-                nn.AvgPool2d(2),
-                ResidualBlock(256, 256)
+        self.features = nn.ModuleList()
+        current_channels = 32
+        for i in range(self.n_blocks):
+            out_channels = min(256, current_channels * 2)  # Cap at 256 channels
+            self.features.append(
+                nn.Sequential(
+                    ResidualBlock(current_channels, out_channels),
+                    nn.AvgPool2d(2),
+                    ResidualBlock(out_channels, out_channels)
+                )
             )
-        ])
+            current_channels = out_channels
         
         # Adaptive pooling to handle any input size
         self.adaptive_pool = nn.AdaptiveAvgPool2d((8, 8))
         
         self.final = nn.Sequential(
-            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, padding_mode="reflect", bias=False),
-            nn.InstanceNorm2d(256, affine=True),
+            nn.Conv2d(current_channels, current_channels, kernel_size=3, stride=1, padding=1, padding_mode="reflect", bias=False),
+            nn.InstanceNorm2d(current_channels, affine=True),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(256, 1, kernel_size=3, stride=1, padding=1, padding_mode="reflect")
+            nn.Conv2d(current_channels, 1, kernel_size=3, stride=1, padding=1, padding_mode="reflect")
         )
         
         for m in self.modules():

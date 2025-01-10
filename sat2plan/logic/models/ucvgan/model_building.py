@@ -172,13 +172,13 @@ class Generator(nn.Module):
 
         # Final upsampling avec plus de couches
         self.final_up = nn.Sequential(
-            # nn.Conv2d(features * 2, features, kernel_size=3, stride=1, padding=1, bias=False),
-            # nn.InstanceNorm2d(features, affine=True),
-            # nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.InstanceNorm2d(features // 2, affine=True),
+            nn.Conv2d(features * 2, features, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.InstanceNorm2d(features, affine=True),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(features // 2, in_channels, kernel_size=1, stride=1, padding=0),
+            nn.Conv2d(features, in_channels, kernel_size=3, stride=1, padding=1, bias=False),
+            # nn.InstanceNorm2d(features // 2, affine=True),
+            # nn.LeakyReLU(0.2, inplace=True),
+            # nn.Conv2d(features // 2, in_channels, kernel_size=1, stride=1, padding=0),
             nn.Tanh()
         )
 

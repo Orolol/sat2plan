@@ -146,11 +146,14 @@ class Generator(nn.Module):
 
         # Bottleneck with increased attention heads and blocks
         self.bottleneck = PixelwiseViT(
-            features * 8, 16, 12, 2048,  # Plus de têtes d'attention et de blocs
-            features * 8,
-            image_shape=(features * 8, 8, 8),
+            features * 8,  # input features
+            16,           # n_heads
+            12,           # n_blocks
+            2048,         # ffn_features
+            features * 8,     # embed_features proportionnel au nombre de features de base
+            image_shape=(features * 8, 8, 8),  # shape après l'encodeur
             rezero=True,
-            dropout=0.1  # Ajout de dropout pour régularisation
+            dropout=0.1
         )
 
         # Decoder blocks with skip connections and increased features

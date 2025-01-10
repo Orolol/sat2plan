@@ -158,8 +158,8 @@ class UCVGan():
         os.makedirs("data", exist_ok=True)
 
         # Create datasets
-        self.train_dataset = Satellite2Map_Data(root=self.train_dir)
-        self.val_dataset = Satellite2Map_Data(root=self.val_dir)
+        self.train_dataset = Satellite2Map_Data(root=self.train_dir, image_size=self.image_size)
+        self.val_dataset = Satellite2Map_Data(root=self.val_dir, image_size=self.image_size)
 
         # Create samplers for distributed training
         if self.cuda and self.world_size > 1:

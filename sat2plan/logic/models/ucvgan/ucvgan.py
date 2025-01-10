@@ -321,7 +321,7 @@ class UCVGan():
                 print("Compiling models with torch.compile()...")
                 # Use inductor backend for H100
                 compile_config = {
-                    "mode": "reduce-overhead",
+                    # "mode": "reduce-overhead",
                     "backend": "inductor",
                     "fullgraph": False,  # Changed to False to avoid CUDA graph issues
                     "dynamic": True,  # Changed to True for more flexible execution

@@ -207,8 +207,8 @@ class UCVGan():
 
     def create_models(self):
         # Initialize models
-        self.netD = Discriminator(in_channels=3, input_size=self.image_size).to(self.device)
-        self.netG = Generator(in_channels=3, input_size=self.image_size).to(self.device)
+        self.netD = Discriminator(in_channels=3).to(self.device)
+        self.netG = Generator(in_channels=3).to(self.device)
         self.starting_epoch = 0
         
         # Paramètres d'équilibrage
@@ -220,7 +220,7 @@ class UCVGan():
         
         # Gradient smoothing
         self.beta_smoothing = 0.999
-        self.generator_ema = Generator(in_channels=3, input_size=self.image_size).to(self.device)
+        self.generator_ema = Generator(in_channels=3).to(self.device)
         self.generator_ema.load_state_dict(self.netG.state_dict())
         for param in self.generator_ema.parameters():
             param.requires_grad = False

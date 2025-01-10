@@ -5,6 +5,8 @@ from sat2plan.logic.models.ucvgan.ucvgan import UCVGan
 from sat2plan.logic.models.samgan.samgan import SAMGAN
 from sat2plan.logic.models.unet.unet import Unet
 from sat2plan.logic.models.basegan.dcgan import run_dcgan
+from sat2plan.logic.models.vit.vit_trainer import ViTTrainer
+from sat2plan.logic.models.diffusion.trainer import DiffusionTrainer
 from sat2plan.logic.configuration.config import Global_Configuration
 from sat2plan.logic.preproc.dataset import Satellite2Map_Data
 from sat2plan.logic.preproc.data import download_bucket_folder
@@ -36,6 +38,50 @@ def train_ucvgan():
                     error_callback=error_callback)
         else:
             UCVGan(0, 1)  # Single GPU or CPU training
+    except Exception as e:
+        print(f"Error during training: {e}")
+        import traceback
+        print("Full traceback:")
+        traceback.print_exc()
+        raise
+
+def train_vit():
+    ensure_data_downloaded()
+    G_CFG = Global_Configuration()
+    n_gpus = torch.cuda.device_count()
+    print(f"Number of GPUs: {n_gpus}")
+    
+    try:
+        if n_gpus > 1:
+            mp.spawn(ViTTrainer,
+                    args=(n_gpus,),
+                    nprocs=n_gpus,
+                    join=True,
+                    error_callback=error_callback)
+        else:
+            ViTTrainer(0, 1)  # Single GPU or CPU training
+    except Exception as e:
+        print(f"Error during training: {e}")
+        import traceback
+        print("Full traceback:")
+        traceback.print_exc()
+        raise
+
+def train_diffusion():
+    ensure_data_downloaded()
+    G_CFG = Global_Configuration()
+    n_gpus = torch.cuda.device_count()
+    print(f"Number of GPUs: {n_gpus}")
+    
+    try:
+        if n_gpus > 1:
+            mp.spawn(DiffusionTrainer,
+                    args=(n_gpus,),
+                    nprocs=n_gpus,
+                    join=True,
+                    error_callback=error_callback)
+        else:
+            DiffusionTrainer(0, 1)  # Single GPU or CPU training
     except Exception as e:
         print(f"Error during training: {e}")
         import traceback

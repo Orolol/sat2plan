@@ -13,6 +13,12 @@ run_train_ucvgan:
 run_train_sam_gan:
 	python3 -c 'from sat2plan.interface.main import train_sam_gan; train_sam_gan()'
 
+run_train_vit:
+	python3 -c 'from sat2plan.interface.main import train_vit; train_vit()'
+
+run_train_diffusion:
+	python3 -c 'from sat2plan.interface.main import train_diffusion; train_diffusion()'
+
 run_pred:
 	python3 -c 'from sat2plan.interface.main import pred; pred()'
 

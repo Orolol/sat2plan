@@ -46,20 +46,27 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(0.2, inplace=True)
         )
         
-        self.layer1 = nn.Sequential(
-            ResidualBlock(32, 64, stride=2),
-            ResidualBlock(64, 64)
-        )
+        # Dynamic feature extraction blocks
+        self.features = nn.ModuleList([
+            nn.Sequential(
+                ResidualBlock(32, 64),
+                nn.AvgPool2d(2),
+                ResidualBlock(64, 64)
+            ),
+            nn.Sequential(
+                ResidualBlock(64, 128),
+                nn.AvgPool2d(2),
+                ResidualBlock(128, 128)
+            ),
+            nn.Sequential(
+                ResidualBlock(128, 256),
+                nn.AvgPool2d(2),
+                ResidualBlock(256, 256)
+            )
+        ])
         
-        self.layer2 = nn.Sequential(
-            ResidualBlock(64, 128, stride=2),
-            ResidualBlock(128, 128)
-        )
-        
-        self.layer3 = nn.Sequential(
-            ResidualBlock(128, 256, stride=2),
-            ResidualBlock(256, 256)
-        )
+        # Adaptive pooling to handle any input size
+        self.adaptive_pool = nn.AdaptiveAvgPool2d((8, 8))
         
         self.final = nn.Sequential(
             nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, padding_mode="reflect", bias=False),
@@ -78,9 +85,14 @@ class Discriminator(nn.Module):
     def forward(self, x, y):
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
+        
+        # Apply feature extraction blocks
+        for block in self.features:
+            x = block(x)
+        
+        # Adaptive pooling to fixed size
+        x = self.adaptive_pool(x)
+        
         return self.final(x)
 
 

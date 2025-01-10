@@ -102,8 +102,12 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, kernel_size=3, stride=1, padding=1, in_channels=3, features=128):
+    def __init__(self, kernel_size=3, stride=1, padding=1, in_channels=3, features=64, input_size=256):
         super().__init__()
+        
+        # Calculate number of encoder blocks needed
+        self.n_blocks = max(5, (input_size // 256) + 4)  # 5 blocks for 256x256, 6 for 512x512, etc.
+        final_size = input_size // (2 ** self.n_blocks)  # Size after all encoder blocks
         
         # Initial downsampling avec normalisation
         self.initial_down = nn.Sequential(
@@ -116,33 +120,17 @@ class Generator(nn.Module):
         )
 
         # Encoder blocks with increased feature sizes
-        self.encoder = nn.ModuleList([
-            # Block 1: (B, 64, 256, 256) -> (B, 128, 128, 128)
-            nn.ModuleDict({
-                'conv': UVCCNNlock(features, features*2, down=True),
-                'scale': DownsamplingBlock(features*2, features*2)
-            }),
-            # Block 2: (B, 128, 128, 128) -> (B, 256, 64, 64)
-            nn.ModuleDict({
-                'conv': UVCCNNlock(features*2, features*4, down=True),
-                'scale': DownsamplingBlock(features*4, features*4)
-            }),
-            # Block 3: (B, 256, 64, 64) -> (B, 512, 32, 32)
-            nn.ModuleDict({
-                'conv': UVCCNNlock(features*4, features*8, down=True),
-                'scale': DownsamplingBlock(features*8, features*8)
-            }),
-            # Block 4: (B, 512, 32, 32) -> (B, 512, 16, 16)
-            nn.ModuleDict({
-                'conv': UVCCNNlock(features*8, features*8, down=True),
-                'scale': DownsamplingBlock(features*8, features*8)
-            }),
-            # Block 5: (B, 512, 16, 16) -> (B, 512, 8, 8)
-            nn.ModuleDict({
-                'conv': UVCCNNlock(features*8, features*8, down=True),
-                'scale': DownsamplingBlock(features*8, features*8)
-            })
-        ])
+        self.encoder = nn.ModuleList()
+        current_features = features
+        for i in range(self.n_blocks):
+            out_features = min(features * 8, current_features * 2)  # Cap at features * 8
+            self.encoder.append(
+                nn.ModuleDict({
+                    'conv': UVCCNNlock(current_features, out_features, down=True),
+                    'scale': DownsamplingBlock(out_features, out_features)
+                })
+            )
+            current_features = out_features
 
         # Bottleneck with increased attention heads and blocks
         self.bottleneck = PixelwiseViT(
@@ -150,40 +138,31 @@ class Generator(nn.Module):
             16,           # n_heads
             12,           # n_blocks
             2048,         # ffn_features
-            features * 8,     # embed_features proportionnel au nombre de features de base
-            image_shape=(features * 8, 8, 8),  # shape après l'encodeur
+            features * 8, # embed_features
+            image_shape=(features * 8, final_size, final_size),  # shape après l'encodeur
             rezero=True,
             dropout=0.1
         )
 
         # Decoder blocks with skip connections and increased features
-        self.decoder = nn.ModuleList([
-            # Block 1: (B, 1024, 8, 8) -> (B, 512, 16, 16)
-            nn.ModuleDict({
-                'scale': UpsamplingBlock(features*16, features*16),
-                'conv': UVCCNNlock(features*16, features*8, down=False)
-            }),
-            # Block 2: (B, 1024, 16, 16) -> (B, 512, 32, 32)
-            nn.ModuleDict({
-                'scale': UpsamplingBlock(features*16, features*16),
-                'conv': UVCCNNlock(features*16, features*8, down=False)
-            }),
-            # Block 3: (B, 1024, 32, 32) -> (B, 512, 64, 64)
-            nn.ModuleDict({
-                'scale': UpsamplingBlock(features*16, features*16),
-                'conv': UVCCNNlock(features*16, features*8, down=False)
-            }),
-            # Block 4: (B, 768, 64, 64) -> (B, 256, 128, 128)
-            nn.ModuleDict({
-                'scale': UpsamplingBlock(features*12, features*12),
-                'conv': UVCCNNlock(features*12, features*4, down=False)
-            }),
-            # Block 5: (B, 384, 128, 128) -> (B, 128, 256, 256)
-            nn.ModuleDict({
-                'scale': UpsamplingBlock(features*6, features*6),
-                'conv': UVCCNNlock(features*6, features*2, down=False)
-            })
-        ])
+        self.decoder = nn.ModuleList()
+        for i in range(self.n_blocks):
+            if i < 3:  # Premiers blocs
+                in_features = features * 16
+                out_features = features * 8
+            elif i < 4:  # Quatrième bloc
+                in_features = features * 12
+                out_features = features * 4
+            else:  # Derniers blocs
+                in_features = features * 6
+                out_features = features * 2
+            
+            self.decoder.append(
+                nn.ModuleDict({
+                    'scale': UpsamplingBlock(in_features, in_features),
+                    'conv': UVCCNNlock(in_features, out_features, down=False)
+                })
+            )
 
         # Final upsampling avec plus de couches
         self.final_up = nn.Sequential(

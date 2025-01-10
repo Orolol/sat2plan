@@ -208,7 +208,7 @@ class UCVGan():
     def create_models(self):
         # Initialize models
         self.netD = Discriminator(in_channels=3).to(self.device)
-        self.netG = Generator(in_channels=3).to(self.device)
+        self.netG = Generator(in_channels=3, input_size=self.image_size).to(self.device)
         self.starting_epoch = 0
         
         # Paramètres d'équilibrage

@@ -321,15 +321,15 @@ class UCVGan():
                 print("Compiling models with torch.compile()...")
                 # Use inductor backend for H100
                 compile_config = {
-                    # "mode": "reduce-overhead",
-                    "backend": "inductor",
-                    "fullgraph": False,  # Changed to False to avoid CUDA graph issues
-                    "dynamic": True,  # Changed to True for more flexible execution
-                    "options": {
-                        "max_autotune": True,
-                        "epilogue_fusion": True,
-                        "max_fusion_size": 4,
-                    }
+                    "mode": "default",
+                    # "backend": "inductor",
+                    # "fullgraph": False,  # Changed to False to avoid CUDA graph issues
+                    # "dynamic": True,  # Changed to True for more flexible execution
+                    # "options": {
+                    #     "max_autotune": True,
+                    #     "epilogue_fusion": True,
+                    #     "max_fusion_size": 4,
+                    # }
                 }
                 self.netG = torch.compile(self.netG, **compile_config)
                 self.netD = torch.compile(self.netD, **compile_config)
@@ -429,7 +429,7 @@ class UCVGan():
                     total_images += current_batch_size
 
                     # Pre-compute fake images for both D and G updates
-                    with torch.cuda.amp.autocast():
+                    with torch.amp.autocast(device_type='cuda'):
                         torch.compiler.cudagraph_mark_step_begin()  # Mark CUDA graph step
                         y_fake = self.netG(x)
                         y_fake = y_fake.clone()  # Clone to prevent overwriting
@@ -448,7 +448,7 @@ class UCVGan():
                         
                         self.OptimizerD.zero_grad(set_to_none=True)
                         
-                        with torch.cuda.amp.autocast():
+                        with torch.amp.autocast(device_type='cuda'):
                             torch.compiler.cudagraph_mark_step_begin()  # Mark CUDA graph step
                             # Use EMA generator for discriminator
                             with torch.no_grad():
@@ -481,7 +481,7 @@ class UCVGan():
                     ############## Train Generator ##############
                     self.OptimizerG.zero_grad(set_to_none=True)
 
-                    with torch.cuda.amp.autocast():
+                    with torch.amp.autocast(device_type='cuda'):
                         torch.compiler.cudagraph_mark_step_begin()  # Mark CUDA graph step
                         D_fake = self.netD(x, y_fake)
                         G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))

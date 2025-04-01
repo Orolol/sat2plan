@@ -13,4 +13,3 @@ python-dotenv>=1.0.1
 albumentations>=1.4.1
 streamlit>=1.32.1
 streamlit_image_comparison>=0.0.4
-torch_xla

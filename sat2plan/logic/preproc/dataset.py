@@ -19,6 +19,7 @@ class Satellite2Map_Data(Dataset):
             file_path = os.path.join(self.root, file)
             if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
                 try:
+                    print(f"Checking file: {file_path}")
                     # Test rapide d'ouverture pour vérifier l'intégrité
                     with Image.open(file_path) as img:
                         img.verify()  # Vérification de l'intégrité

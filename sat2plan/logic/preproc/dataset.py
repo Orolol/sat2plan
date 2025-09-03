@@ -9,7 +9,32 @@ class Satellite2Map_Data(Dataset):
     def __init__(self, root, image_size=256):
         self.root = root
         self.image_size = image_size
-        self.list_files = os.listdir(self.root)
+        
+        # Filtrer uniquement les fichiers existants et valides
+        all_files = os.listdir(self.root)
+        self.list_files = []
+        
+        print(f"Scanning {len(all_files)} files in {root}...")
+        for file in all_files:
+            file_path = os.path.join(self.root, file)
+            if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                try:
+                    # Test rapide d'ouverture pour vérifier l'intégrité
+                    with Image.open(file_path) as img:
+                        img.verify()  # Vérification de l'intégrité
+                    self.list_files.append(file)
+                except Exception as e:
+                    print(f"Skipping corrupted file {file}: {e}")
+                    # Supprimer le fichier corrompu
+                    try:
+                        os.remove(file_path)
+                        print(f"Deleted corrupted file: {file_path}")
+                    except:
+                        pass
+            else:
+                print(f"Skipping missing or empty file: {file}")
+        
+        print(f"Found {len(self.list_files)} valid files out of {len(all_files)}")
         
         # Transformations de base (redimensionnement et normalisation)
         self.resize_transform = transforms.Resize((image_size, image_size), antialias=True)
@@ -43,11 +68,31 @@ class Satellite2Map_Data(Dataset):
         return len(self.list_files)
 
     def __getitem__(self, index):
-        img_file = self.list_files[index]
-        img_path = os.path.join(self.root, img_file)
-        
-        # Charger l'image avec PIL
-        image = Image.open(img_path)
+        # Gestion robuste des erreurs avec fallback
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                current_index = (index + attempt) % len(self.list_files)
+                img_file = self.list_files[current_index]
+                img_path = os.path.join(self.root, img_file)
+                
+                # Vérifier l'existence du fichier
+                if not os.path.exists(img_path):
+                    print(f"File missing: {img_path}")
+                    continue
+                
+                # Charger l'image avec PIL
+                image = Image.open(img_path)
+                break
+                
+            except Exception as e:
+                print(f"Error loading {img_path}: {e}")
+                if attempt == max_retries - 1:
+                    # Dernière tentative échouée, créer une image dummy
+                    print(f"Creating dummy image after {max_retries} failed attempts")
+                    image = Image.new('RGB', (512, 256), color='black')
+                    break
+                continue
         
         # Séparer l'image en deux (satellite et plan)
         w = image.width

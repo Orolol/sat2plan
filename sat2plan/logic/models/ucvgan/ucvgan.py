@@ -4,8 +4,15 @@ import tempfile
 # Create and set up temporary directory before any other imports
 temp_dir = os.path.join(os.getcwd(), 'tmp')
 os.makedirs(temp_dir, exist_ok=True)
+# Ensure the directory is accessible and writable
+os.chmod(temp_dir, 0o755)
 os.environ['TMPDIR'] = temp_dir
+os.environ['TEMP'] = temp_dir  # For compatibility
 tempfile.tempdir = temp_dir
+
+# Also set multiprocessing temp dir
+import multiprocessing
+multiprocessing.current_process()._config['tempdir'] = temp_dir
 
 import torch
 import torch.nn as nn
@@ -26,8 +33,11 @@ import shutil
 class UCVGan():
     def __init__(self, rank, world_size):
         try:
-            # Use the already created temporary directory
+            # Use the already created temporary directory and ensure it still exists
             self.temp_dir = temp_dir
+            if not os.path.exists(self.temp_dir):
+                os.makedirs(self.temp_dir, exist_ok=True)
+                os.chmod(self.temp_dir, 0o755)
             
             # Import des paramètres globaux
             self.G_CFG = Global_Configuration()

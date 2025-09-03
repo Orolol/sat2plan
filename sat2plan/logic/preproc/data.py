@@ -4,7 +4,6 @@ from sat2plan.scripts.params import BUCKET_NAME
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 import numpy as np
-import shutil
 
 
 def is_valid_map_image(img_path, min_std_threshold=0.015):
@@ -21,22 +20,16 @@ def is_valid_map_image(img_path, min_std_threshold=0.015):
         normalized_std = std_dev / 255.0
         is_valid = normalized_std > min_std_threshold
         if not is_valid:
-            # Créer le répertoire removed s'il n'existe pas
-            removed_dir = os.path.join(os.path.dirname(os.path.dirname(img_path)), 'removed')
-            os.makedirs(removed_dir, exist_ok=True)
-            # Déplacer l'image dans le répertoire removed
-            new_path = os.path.join(removed_dir, os.path.basename(img_path))
-            shutil.move(img_path, new_path)
-            print(f"Moving {img_path} to removed: insufficient urban features (std_dev: {normalized_std:.3f})")
+            # Supprimer l'image invalide
+            os.remove(img_path)
+            print(f"Deleted {img_path}: insufficient urban features (std_dev: {normalized_std:.3f})")
         return is_valid
     except Exception as e:
         print(f"Error processing {img_path}: {str(e)}")
         if os.path.exists(img_path):
-            # En cas d'erreur, déplacer aussi dans removed
-            removed_dir = os.path.join(os.path.dirname(os.path.dirname(img_path)), 'removed')
-            os.makedirs(removed_dir, exist_ok=True)
-            new_path = os.path.join(removed_dir, os.path.basename(img_path))
-            shutil.move(img_path, new_path)
+            # En cas d'erreur, supprimer l'image corrompue
+            os.remove(img_path)
+            print(f"Deleted corrupted image: {img_path}")
         return False
 
 
@@ -62,7 +55,7 @@ def download_bucket_folder(folder_name, val_size=0):
     bucket = storage_client.bucket(BUCKET_NAME)
     blobs = bucket.list_blobs(prefix=folder_name)
 
-    with ThreadPoolExecutor(max_workers=32) as executor:
+    with ThreadPoolExecutor(max_workers=64) as executor:
         for idx, blob in enumerate(blobs):
             if val_size == 0:
                 file_path = os.path.join(destination_folder, blob.name)

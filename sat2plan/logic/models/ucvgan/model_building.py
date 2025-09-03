@@ -144,11 +144,6 @@ class Generator(nn.Module):
         
         # Enable gradient checkpointing for memory efficiency
         self.use_gradient_checkpointing = True
-        
-        # Learnable skip connection weights for better feature fusion
-        self.skip_weights = nn.ParameterList([
-            nn.Parameter(torch.ones(1) * 0.5) for _ in range(len(self.decoder))
-        ])
 
         # Decoder blocks with skip connections and increased features
         self.decoder = nn.ModuleList([
@@ -191,6 +186,11 @@ class Generator(nn.Module):
             nn.Tanh()
         )
 
+        # Learnable skip connection weights for better feature fusion (after decoder is defined)
+        self.skip_weights = nn.ParameterList([
+            nn.Parameter(torch.ones(1) * 0.5) for _ in range(len(self.decoder))
+        ])
+        
         # Initialisation des poids
         for m in self.modules():
             if isinstance(m, nn.Conv2d):

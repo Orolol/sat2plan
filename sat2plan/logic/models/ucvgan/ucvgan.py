@@ -152,7 +152,7 @@ class UCVGan():
             print(f"Device properties: {torch.cuda.get_device_properties(self.rank)}")
             
             # Verify CUDA is working
-            test_tensor = torch.cuda.FloatTensor(2, 2).fill_(1.0)
+            test_tensor = torch.ones(2, 2, device=self.device, dtype=torch.float32)
             print(f"Test tensor device: {test_tensor.device}")
             
         except Exception as e:
@@ -406,9 +406,6 @@ class UCVGan():
             batch_times = []
             
             for epoch in range(self.starting_epoch, self.n_epochs):
-                # Update learning rates using schedulers
-                self.schedulerD.step()
-                self.schedulerG.step()
 
                 if self.world_size > 1:
                     self.train_dl.sampler.set_epoch(epoch)
@@ -433,16 +430,12 @@ class UCVGan():
                     y = y.to(self.device, non_blocking=True)
                     total_images += current_batch_size
 
-                    # Pre-compute fake images for both D and G updates
-                    with torch.amp.autocast(device_type='cuda'):
-                        y_fake = self.netG(x)
-                        y_fake = y_fake.detach().clone()  # Detach and clone to prevent memory leaks
-                        # Update EMA model
-                        with torch.no_grad():
-                            for ema_param, current_param in zip(self.generator_ema.parameters(), self.netG.parameters()):
-                                ema_param.data.mul_(self.beta_smoothing).add_(
-                                    current_param.data, alpha=(1 - self.beta_smoothing)
-                                )
+                    # Update EMA model first
+                    with torch.no_grad():
+                        for ema_param, current_param in zip(self.generator_ema.parameters(), self.netG.parameters()):
+                            ema_param.data.mul_(self.beta_smoothing).add_(
+                                current_param.data, alpha=(1 - self.beta_smoothing)
+                            )
 
                     ############## Train Discriminator ##############
                     # Train discriminator every n_critic iterations
@@ -485,6 +478,8 @@ class UCVGan():
                     self.OptimizerG.zero_grad(set_to_none=True)
 
                     with torch.amp.autocast(device_type='cuda'):
+                        # Generate fake images for generator training (with gradients)
+                        y_fake = self.netG(x)
                         D_fake = self.netD(x, y_fake)
                         G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
                         L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
@@ -585,6 +580,10 @@ class UCVGan():
                     if self.patience_counter >= self.patience:
                         print(f"Early stopping triggered after {epoch + 1} epochs")
                         break
+                
+                # Update learning rates at the end of the epoch
+                self.schedulerD.step()
+                self.schedulerG.step()
 
             if self.rank == 0:
                 # Final save

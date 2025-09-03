@@ -119,9 +119,14 @@ class UCVGan():
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
             torch.backends.cudnn.enabled = True
-            torch.backends.cuda.enable_mem_efficient_sdp(True)
+            
+            # Enable optimized SDPA backends in correct order
             torch.backends.cuda.enable_flash_sdp(True)
+            torch.backends.cuda.enable_mem_efficient_sdp(True) 
             torch.backends.cuda.enable_math_sdp(True)
+            
+            # Enable channels_last memory format for better performance
+            torch.backends.cudnn.benchmark_limit = 10
             
             # Configuration du processus distribué
             if self.world_size > 1:
@@ -430,9 +435,8 @@ class UCVGan():
 
                     # Pre-compute fake images for both D and G updates
                     with torch.amp.autocast(device_type='cuda'):
-                        torch.compiler.cudagraph_mark_step_begin()  # Mark CUDA graph step
                         y_fake = self.netG(x)
-                        y_fake = y_fake.clone()  # Clone to prevent overwriting
+                        y_fake = y_fake.detach().clone()  # Detach and clone to prevent memory leaks
                         # Update EMA model
                         with torch.no_grad():
                             for ema_param, current_param in zip(self.generator_ema.parameters(), self.netG.parameters()):
@@ -449,11 +453,10 @@ class UCVGan():
                         self.OptimizerD.zero_grad(set_to_none=True)
                         
                         with torch.amp.autocast(device_type='cuda'):
-                            torch.compiler.cudagraph_mark_step_begin()  # Mark CUDA graph step
                             # Use EMA generator for discriminator
                             with torch.no_grad():
                                 y_fake_ema = self.generator_ema(x)
-                                y_fake_ema = y_fake_ema.clone()  # Clone to prevent overwriting
+                                y_fake_ema = y_fake_ema.detach().clone()  # Detach and clone
                             
                             D_real = self.netD(x, y)
                             D_fake = self.netD(x, y_fake_ema.detach())
@@ -482,7 +485,6 @@ class UCVGan():
                     self.OptimizerG.zero_grad(set_to_none=True)
 
                     with torch.amp.autocast(device_type='cuda'):
-                        torch.compiler.cudagraph_mark_step_begin()  # Mark CUDA graph step
                         D_fake = self.netD(x, y_fake)
                         G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
                         L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
@@ -653,9 +655,9 @@ class UCVGan():
                 sum_D_fake_loss += D_fake_loss.item()
                 num_batches += 1
                 
-                # Explicitement libérer la mémoire
+                # Optimized memory cleanup
                 del y_fake, D_real, D_fake, D_loss, G_loss, G_L1
-                if idx % 2 == 0:  # Périodiquement forcer le garbage collector
+                if idx % 5 == 0:  # Less frequent but more efficient cleanup
                     torch.cuda.empty_cache()
 
         # Calculer les moyennes

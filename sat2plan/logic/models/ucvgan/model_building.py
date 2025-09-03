@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 from sat2plan.logic.blocks.blocks import CNN_Block, UVCCNNlock, PixelwiseViT, DownsamplingBlock, UpsamplingBlock
 
 
@@ -132,7 +133,7 @@ class Generator(nn.Module):
             })
         ])
 
-        # Bottleneck with increased attention heads and blocks
+        # Bottleneck with increased attention heads and blocks + gradient checkpointing
         self.bottleneck = PixelwiseViT(
             features * 8, 16, 12, 2048,  # Plus de têtes d'attention et de blocs
             features * 8,
@@ -140,6 +141,14 @@ class Generator(nn.Module):
             rezero=True,
             dropout=0.1  # Ajout de dropout pour régularisation
         )
+        
+        # Enable gradient checkpointing for memory efficiency
+        self.use_gradient_checkpointing = True
+        
+        # Learnable skip connection weights for better feature fusion
+        self.skip_weights = nn.ParameterList([
+            nn.Parameter(torch.ones(1) * 0.5) for _ in range(len(self.decoder))
+        ])
 
         # Decoder blocks with skip connections and increased features
         self.decoder = nn.ModuleList([
@@ -192,27 +201,36 @@ class Generator(nn.Module):
 
     @torch.amp.autocast('cuda')
     def forward(self, x):
+        # Convert to channels_last for better memory efficiency on modern GPUs
+        x = x.to(memory_format=torch.channels_last)
+        
         # Initial downsampling
         d1 = self.initial_down(x)
         
-        # Encoder with memory optimization
+        # Encoder with memory optimization - keep features in channels_last
         encoder_features = []
         current = d1
         for block in self.encoder:
             current = block['scale'](block['conv'](current))
-            encoder_features.append(current)
+            encoder_features.append(current.to(memory_format=torch.channels_last))
         
-        # Bottleneck
-        bottleneck = self.bottleneck(encoder_features[-1])
+        # Bottleneck with gradient checkpointing for memory efficiency
+        if self.use_gradient_checkpointing and self.training:
+            bottleneck = checkpoint(self.bottleneck, encoder_features[-1], use_reentrant=False)
+        else:
+            bottleneck = self.bottleneck(encoder_features[-1])
         
-        # Decoder with optimized skip connections
+        # Decoder with learnable weighted skip connections
         current = bottleneck
         for idx, block in enumerate(self.decoder):
             skip_connection = encoder_features[-(idx+1)]
-            current = torch.cat([current, skip_connection], dim=1)
+            # Apply learnable weight to skip connection
+            weighted_skip = skip_connection * self.skip_weights[idx]
+            current = torch.cat([current, weighted_skip], dim=1)
             current = block['conv'](block['scale'](current))
         
-        # Final upsampling
+        # Final upsampling - convert back to contiguous format
         result = self.final_up(current)
+        result = result.contiguous(memory_format=torch.contiguous_format)
         
         return result

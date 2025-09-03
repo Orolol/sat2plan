@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class CNN_Block(nn.Module):
@@ -86,23 +87,84 @@ class UpsamplingBlock(nn.Module):
         return self.conv(x)
 
 
+class DropPath(nn.Module):
+    """Stochastic Depth per sample for regularization.
+    
+    Based on Deep Networks with Stochastic Depth: https://arxiv.org/pdf/1603.09382.pdf
+    """
+    def __init__(self, drop_prob=0.0):
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x):
+        if not self.training or self.drop_prob == 0.0:
+            return x
+        keep_prob = 1 - self.drop_prob
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with different dim tensors
+        random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+        random_tensor.floor_()  # binarize
+        output = x.div(keep_prob) * random_tensor
+        return output
+
+
+class ScaledDotProductAttention(nn.Module):
+    def __init__(self, embed_dim, num_heads, dropout=0.1):
+        super().__init__()
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        assert self.head_dim * num_heads == embed_dim, "embed_dim must be divisible by num_heads"
+        
+        self.qkv = nn.Linear(embed_dim, embed_dim * 3, bias=False)
+        self.attn_dropout = dropout
+        self.proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.proj_drop = nn.Dropout(dropout)
+
+    def forward(self, x):
+        B, N, C = x.shape
+        
+        # Split heads and generate q, k, v
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
+        qkv = qkv.permute(2, 0, 3, 1, 4)  # (3, B, num_heads, N, head_dim)
+        q, k, v = qkv[0], qkv[1], qkv[2]
+        
+        # Use torch's optimized scaled dot product attention
+        x = F.scaled_dot_product_attention(
+            q, k, v,
+            dropout_p=self.attn_dropout if self.training else 0.0,
+        )
+        
+        # Reshape back
+        x = x.transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        
+        return x
+
+
 class TransformerBlock(nn.Module):
-    def __init__(self, features, ffn_features, n_heads, rezero=True, dropout=0.1, **kwargs):
+    def __init__(self, features, ffn_features, n_heads, rezero=True, dropout=0.1, 
+                 layer_scale_init=1e-4, drop_path=0.0, **kwargs):
         super().__init__(**kwargs)
 
         self.norm1 = nn.LayerNorm(features, eps=1e-5)
         
-        self.atten = nn.MultiheadAttention(
+        self.atten = ScaledDotProductAttention(
             features, 
             n_heads, 
-            dropout=dropout, 
-            batch_first=True
+            dropout=dropout
         )
         self.dropout1 = nn.Dropout(dropout)
 
         self.norm2 = nn.LayerNorm(features, eps=1e-5)
         self.ffn = PositionWise(features, ffn_features, dropout=dropout)
         self.dropout2 = nn.Dropout(dropout)
+
+        # Layer Scale for training stability
+        self.layer_scale1 = nn.Parameter(torch.ones(features) * layer_scale_init) if layer_scale_init > 0 else None
+        self.layer_scale2 = nn.Parameter(torch.ones(features) * layer_scale_init) if layer_scale_init > 0 else None
+        
+        # Stochastic Depth for regularization
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
         self.rezero = rezero
         if rezero:
@@ -111,18 +173,29 @@ class TransformerBlock(nn.Module):
             self.re_alpha = 1
 
     def forward(self, x):
+        # Self-attention with layer scale and stochastic depth
         residual = x
-        
         y = self.norm1(x)
-        y, _ = self.atten(y, y, y)
+        y = self.atten(y)
         y = self.dropout1(y)
-        x = residual + (y * self.re_alpha if self.rezero else y)
+        
+        if self.layer_scale1 is not None:
+            y = y * self.layer_scale1
+        
+        y = y * self.re_alpha if self.rezero else y
+        x = residual + self.drop_path(y)
 
+        # Feed-forward with layer scale and stochastic depth
         residual = x
         y = self.norm2(x)
         y = self.ffn(y)
         y = self.dropout2(y)
-        x = residual + (y * self.re_alpha if self.rezero else y)
+        
+        if self.layer_scale2 is not None:
+            y = y * self.layer_scale2
+            
+        y = y * self.re_alpha if self.rezero else y
+        x = residual + self.drop_path(y)
 
         return x
 

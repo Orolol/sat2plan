@@ -12,11 +12,9 @@ from typing import Dict
 from colorama import Fore, Style
 from google.cloud import storage
 
-from sat2plan.scripts.params import MODEL_TARGET, BUCKET_NAME, MLFLOW_TRACKING_URI, MLFLOW_EXPERIMENT, MLFLOW_MODEL_NAME
+from sat2plan.scripts.params import MODEL_TARGET, BUCKET_NAME
 from sat2plan.logic.configuration.config import Global_Configuration
 
-import mlflow
-from mlflow.tracking import MlflowClient
 
 LOCAL_REGISTRY_PATH = os.getcwd() + "/save/checkpoints"
 
@@ -24,7 +22,7 @@ LOCAL_REGISTRY_PATH = os.getcwd() + "/save/checkpoints"
 def check_disk_space(path, required_space_gb=5):
     """Vérifie s'il y a assez d'espace disque"""
     try:
-        total, used, free = shutil.disk_usage(path)
+        _, _, free = shutil.disk_usage(path)
         free_gb = free // (2**30)
         return free_gb >= required_space_gb
     except Exception as e:
@@ -33,13 +31,6 @@ def check_disk_space(path, required_space_gb=5):
 
 
 def save_results(params: dict, metrics: dict) -> None:
-    if MODEL_TARGET == "mlflow":
-        if params is not None:
-            mlflow.log_params(params)
-        if metrics is not None:
-            mlflow.log_metrics(metrics)
-        print("✅ Results saved on MLflow")
-
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     os.makedirs(os.path.join(
         LOCAL_REGISTRY_PATH, "params"), exist_ok=True)
@@ -130,7 +121,7 @@ def load_pred_model() -> torch.nn.Module:
     return model['gen_state_dict']
 
 
-def load_model(stage="Production") -> torch.nn.Module:
+def load_model() -> torch.nn.Module:
     if MODEL_TARGET == "local":
         print(Fore.BLUE + f"\nLoad latest model from local registry..." + Style.RESET_ALL)
 
@@ -180,47 +171,10 @@ def load_model(stage="Production") -> torch.nn.Module:
 
             return None
 
-    elif MODEL_TARGET == "mlflow":
-        print(Fore.BLUE +
-              f"\nLoad [{stage}] model from MLflow..." + Style.RESET_ALL)
-
-        model = None
-        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-        client = MlflowClient()
-
-        try:
-            model_versions = client.get_latest_versions(
-                name=MLFLOW_MODEL_NAME, stages=[stage])
-            model_uri = model_versions[0].source
-
-            assert model_uri is not None
-        except:
-            print(
-                f"\n❌ No model found with name {MLFLOW_MODEL_NAME} in stage {stage}")
-
-            return None
-
-        model = mlflow.pytorch.load_model(model_uri=model_uri)
-
-        print("✅ Model loaded from MLflow")
-        return model
     else:
         return None
 
 
-def mlflow_run(func):
-    def wrapper(*args, **kwargs):
-        mlflow.end_run()
-        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-        mlflow.set_experiment(experiment_name=MLFLOW_EXPERIMENT)
-
-        with mlflow.start_run():
-            mlflow.pytorch.autolog()
-            results = func(*args, **kwargs)
-
-        print("✅ mlflow_run auto-log done")
-
-        return results
 
 
 def save_checkpoint(model, optimizer, filename="my_checkpoint.pth.tar"):

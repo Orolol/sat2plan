@@ -23,6 +23,7 @@ class Satellite2Map_Data(Dataset):
                     with Image.open(file_path) as img:
                         img.verify()  # Vérification de l'intégrité
                     self.list_files.append(file)
+                    print(f"Added valid file: {file}")
                 except Exception as e:
                     print(f"Skipping corrupted file {file}: {e}")
                     # Supprimer le fichier corrompu

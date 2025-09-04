@@ -30,8 +30,9 @@ from sat2plan.scripts.flow import save_results, save_model, load_model
 from sat2plan.logic.preproc.dataset import Satellite2Map_Data
 import shutil
 
-class UCVGan():
+class UCVGan(nn.Module):
     def __init__(self, rank, world_size):
+        super(UCVGan, self).__init__()
         try:
             # Use the already created temporary directory and ensure it still exists
             self.temp_dir = temp_dir

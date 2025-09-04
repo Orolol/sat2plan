@@ -66,8 +66,8 @@ class UCVGan():
             self.beta2 = self.M_CFG.beta2
 
             # Warmup parameters (avant setup_device pour éviter les erreurs d'initialisation)
-            self.warmup_epochs = 5
-            self.warmup_factor = 0.1
+            self.warmup_epochs = 10
+            self.warmup_factor = 0.05
 
             # Setup device et distributed
             self.setup_device()
@@ -193,6 +193,24 @@ class UCVGan():
         if key not in self.tensor_cache:
             self.tensor_cache[key] = torch.empty(shape, dtype=dtype, device=self.device)
         return self.tensor_cache[key]
+    
+    def inject_noise(self, tensor, noise_std):
+        """Injecte du bruit gaussien dans les données"""
+        if noise_std > 0 and self.training:
+            noise = torch.randn_like(tensor) * noise_std
+            return tensor + noise
+        return tensor
+    
+    def get_adaptive_labels(self, tensor_like, is_real, epoch):
+        """Génère des labels avec smoothing adaptatif"""
+        if is_real:
+            # Smoothing adaptatif pour les vrais labels (commence à 0.9, monte vers 0.95)
+            smooth_val = min(0.95, self.label_smooth_real + (epoch / self.n_epochs) * 0.05)
+            return torch.full_like(tensor_like, smooth_val)
+        else:
+            # Smoothing adaptatif pour les faux labels (commence à 0.1, descend vers 0.05)
+            smooth_val = max(0.05, self.label_smooth_fake - (epoch / self.n_epochs) * 0.05)
+            return torch.full_like(tensor_like, smooth_val)
 
     # Load datasets from train/val directories
     def dataloading(self):
@@ -268,12 +286,18 @@ class UCVGan():
         
         self.starting_epoch = 0
         
-        # Paramètres d'équilibrage
-        self.n_critic = 5
-        self.l1_lambda = 100.0
-        self.lambda_gp = 10.0
-        self.g_factor = 0.05
-        self.max_grad_norm = 0.1
+        # Paramètres d'équilibrage optimisés
+        self.n_critic = 3  # Réduction pour plus d'updates du générateur
+        self.l1_lambda = 150.0  # Augmenté initialement, sera schedulé
+        self.lambda_gp = 5.0  # Réduit pour moins contraindre le discriminateur
+        self.g_factor = 0.1  # Augmenté pour plus d'importance adversariale
+        self.max_grad_norm = 0.2  # Légèrement augmenté
+        
+        # Nouveaux paramètres de stabilisation
+        self.noise_std = 0.1  # Noise injection initial
+        self.noise_decay = 0.95  # Decay du noise par epoch
+        self.label_smooth_real = 0.9  # Label smoothing pour real
+        self.label_smooth_fake = 0.1  # Label smoothing pour fake
         
         # Gradient smoothing
         self.beta_smoothing = 0.999
@@ -301,34 +325,50 @@ class UCVGan():
             self.netD = nn.parallel.DistributedDataParallel(self.netD, **ddp_kwargs)
             print(f"Models wrapped in DistributedDataParallel on GPU {self.rank}")
 
-        # Initialize optimizers with full learning rate
+        # Initialize optimizers with improved learning rates
         self.OptimizerD = torch.optim.Adam(
             self.netD.parameters(), 
-            lr=self.learning_rate_D * 0.05, 
+            lr=self.learning_rate_D * 0.2,  # Augmenté de 0.05 à 0.2
             betas=(self.beta1, 0.999),
             fused=True  # Use fused Adam implementation for better performance
         )
         self.OptimizerG = torch.optim.Adam(
             self.netG.parameters(), 
-            lr=self.learning_rate_G * 0.5, 
+            lr=self.learning_rate_G * 1.0,  # Augmenté de 0.5 à 1.0
             betas=(self.beta1, 0.999),
             fused=True
         )
 
-        # Custom learning rate scheduler avec un minimum pour éviter les instabilités
-        total_epochs = self.n_epochs
-        constant_epochs = total_epochs // 2
-        min_lr = 1e-6
+        # Scheduler cosine avec warmup amélioré
+        import math
         
-        def lr_lambda(epoch):
-            if epoch < constant_epochs:
-                return 1.0
+        def cosine_warmup_scheduler(epoch, warmup_epochs, total_epochs, min_lr=1e-6):
+            """Cosine annealing avec warmup progressif"""
+            if epoch < warmup_epochs:
+                # Warmup progressif
+                return self.warmup_factor + (1.0 - self.warmup_factor) * (epoch / warmup_epochs)
             else:
-                decay = 1.0 - (epoch - constant_epochs) / (total_epochs - constant_epochs)
-                return max(decay, min_lr)
+                # Cosine annealing après warmup
+                progress = (epoch - warmup_epochs) / (total_epochs - warmup_epochs)
+                cosine_factor = 0.5 * (1 + math.cos(math.pi * progress))
+                return max(cosine_factor, min_lr)
         
-        self.schedulerD = torch.optim.lr_scheduler.LambdaLR(self.OptimizerD, lr_lambda)
-        self.schedulerG = torch.optim.lr_scheduler.LambdaLR(self.OptimizerG, lr_lambda)
+        self.schedulerD = torch.optim.lr_scheduler.LambdaLR(
+            self.OptimizerD, 
+            lambda epoch: cosine_warmup_scheduler(epoch, self.warmup_epochs, self.n_epochs)
+        )
+        self.schedulerG = torch.optim.lr_scheduler.LambdaLR(
+            self.OptimizerG, 
+            lambda epoch: cosine_warmup_scheduler(epoch, self.warmup_epochs, self.n_epochs)
+        )
+        
+        # L1 lambda scheduling (diminution progressive)
+        self.initial_l1_lambda = self.l1_lambda
+        def get_l1_lambda(epoch):
+            """Diminue progressivement le L1 lambda"""
+            decay_factor = max(0.5, 1.0 - (epoch / self.n_epochs) * 0.3)
+            return self.initial_l1_lambda * decay_factor
+        self.get_l1_lambda = get_l1_lambda
 
         # Compile models if using PyTorch 2.0+
         if hasattr(torch, 'compile'):
@@ -435,10 +475,18 @@ class UCVGan():
                     num_batches += 1
                     current_batch_size = x.size(0)
                     
-                    # Move data to appropriate device
+                    # Move data to appropriate device and inject noise for stability
                     x = x.to(self.device, non_blocking=True)
                     y = y.to(self.device, non_blocking=True)
+                    
+                    # Noise injection pour stabilisation (decay progressif)
+                    current_noise_std = self.noise_std * (self.noise_decay ** epoch)
+                    x = self.inject_noise(x, current_noise_std * 0.5)  # Moins de bruit sur l'input
+                    
                     total_images += current_batch_size
+                    
+                    # Update L1 lambda dynamically
+                    current_l1_lambda = self.get_l1_lambda(epoch)
 
                     # Update EMA model first
                     with torch.no_grad():
@@ -461,18 +509,26 @@ class UCVGan():
                                 y_fake_ema = self.generator_ema(x)
                                 y_fake_ema = y_fake_ema.detach().clone()  # Detach and clone
                             
-                            D_real = self.netD(x, y)
-                            D_fake = self.netD(x, y_fake_ema.detach())
+                            # Inject noise in discriminator inputs pour régularisation
+                            x_noisy = self.inject_noise(x, current_noise_std)
+                            y_noisy = self.inject_noise(y, current_noise_std)
+                            y_fake_noisy = self.inject_noise(y_fake_ema.detach(), current_noise_std)
                             
-                            real_label = torch.ones_like(D_real) * 0.9
-                            fake_label = torch.zeros_like(D_fake) + 0.1
+                            D_real = self.netD(x_noisy, y_noisy)
+                            D_fake = self.netD(x_noisy, y_fake_noisy)
+                            
+                            # Labels adaptatifs avec smoothing amélioré
+                            real_label = self.get_adaptive_labels(D_real, True, epoch)
+                            fake_label = self.get_adaptive_labels(D_fake, False, epoch)
                             
                             D_real_loss = self.BCE_Loss(D_real + self.eps, real_label)
                             D_fake_loss = self.BCE_Loss(D_fake + self.eps, fake_label)
                             D_loss = (D_fake_loss + D_real_loss) / 2
                             
                             gp = gradient_penalty(self.netD, y.detach(), y_fake_ema.detach(), x)
-                            gp = torch.clamp(gp, -2.0, 2.0)
+                            # Clamping progressif du gradient penalty (plus permissif)
+                            max_gp = min(5.0, 2.0 + (epoch / 50) * 3.0)  # Augmente graduellement jusqu'à 5.0
+                            gp = torch.clamp(gp, -max_gp, max_gp)
                             D_loss_W = D_loss + gp
          
                         self.scaler.scale(D_loss_W).backward()
@@ -492,7 +548,7 @@ class UCVGan():
                         y_fake = self.netG(x)
                         D_fake = self.netD(x, y_fake)
                         G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
-                        L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
+                        L1 = self.L1_Loss(y_fake, y) * current_l1_lambda
                         G_loss = G_fake_loss * self.g_factor + L1
 
                         # Adaptive gradient scaling
@@ -556,10 +612,19 @@ class UCVGan():
                     print("-- Validation Test --")
                     self.validation()
                     val_loss = self.val_Gen_loss[-1] + self.val_Dis_loss[-1]
-                    print(f"Epoch : {epoch+1}/{self.n_epochs}")
-                    print(f"Validation Discriminator Loss : {self.val_Dis_loss[-1]:.3f} = Real: {self.val_D_real_loss[-1]:.3f} + Fake: {self.val_D_fake_loss[-1]:.3f}")
-                    print(f"Validation Generator Loss : {self.val_Gen_loss[-1]:.3f} = Adv: {self.val_Gen_fake_loss[-1]:.3f} + L1: {self.val_Gen_L1_loss[-1]:.3f}")
-                    print("------------------------")
+                    print(f"\n{'='*60}")
+                    print(f"EPOCH {epoch+1}/{self.n_epochs} VALIDATION SUMMARY")
+                    print(f"{'='*60}")
+                    print(f"📊 Losses:")
+                    print(f"   • Discriminator Total: {self.val_Dis_loss[-1]:.4f} (Real: {self.val_D_real_loss[-1]:.4f} + Fake: {self.val_D_fake_loss[-1]:.4f})")
+                    print(f"   • Generator Total: {self.val_Gen_loss[-1]:.4f} (Adv: {self.val_Gen_fake_loss[-1]:.4f} + L1: {self.val_Gen_L1_loss[-1]:.4f})")
+                    print(f"   • Combined Val Loss: {val_loss:.4f}")
+                    print(f"🎯 Training Params:")
+                    print(f"   • Current L1 Lambda: {current_l1_lambda:.1f}")
+                    print(f"   • Noise Std: {current_noise_std:.6f}")
+                    print(f"   • LR D/G: {self.OptimizerD.param_groups[0]['lr']:.2e} / {self.OptimizerG.param_groups[0]['lr']:.2e}")
+                    print(f"⚡ Performance: {epoch_throughput:.2f} images/sec")
+                    print(f"{'='*60}\n")
 
                     # Early stopping check
                     if val_loss < self.best_loss:
@@ -643,8 +708,9 @@ class UCVGan():
                 D_real = self.netD(x, y)
                 D_fake = self.netD(x, y_fake)
                 
-                real_label = torch.ones_like(D_real) * 0.9  # Label smoothing
-                fake_label = torch.zeros_like(D_fake) + 0.1  # Label smoothing
+                # Utiliser le même label smoothing que l'entraînement pour la validation
+                real_label = self.get_adaptive_labels(D_real, True, 0)  # Epoch 0 pour valeurs de base
+                fake_label = self.get_adaptive_labels(D_fake, False, 0)
                 
                 D_real_loss = self.BCE_Loss(D_real, real_label)
                 D_fake_loss = self.BCE_Loss(D_fake, fake_label)
@@ -669,13 +735,18 @@ class UCVGan():
                 if idx % 5 == 0:  # Less frequent but more efficient cleanup
                     torch.cuda.empty_cache()
 
-        # Calculer les moyennes
+        # Calculer les moyennes et métriques additionnelles
         avg_D_loss = sum_D_loss / num_batches
         avg_G_loss = sum_G_loss / num_batches
         avg_G_fake_loss = sum_G_fake_loss / num_batches
         avg_G_L1_loss = sum_G_L1_loss / num_batches
         avg_D_real_loss = sum_D_real_loss / num_batches
         avg_D_fake_loss = sum_D_fake_loss / num_batches
+        
+        # Métrique de balance D/G (idéalement proche de 1.0)
+        d_g_balance = avg_D_loss / max(avg_G_loss, 1e-8)
+        if self.rank == 0:
+            print(f"🔍 Validation D/G Balance: {d_g_balance:.3f} (target: ~1.0)")
         
         # Stocker les résultats
         self.val_Dis_loss.append(avg_D_loss)

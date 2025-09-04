@@ -10,6 +10,9 @@ run_train_unet:
 run_train_ucvgan:
 	python3 -c 'from sat2plan.interface.main import train_ucvgan; train_ucvgan()'
 
+run_train_r3gan:
+	python3 -c 'from sat2plan.interface.main import train_r3gan; train_r3gan()'
+
 run_train_sam_gan:
 	python3 -c 'from sat2plan.interface.main import train_sam_gan; train_sam_gan()'
 

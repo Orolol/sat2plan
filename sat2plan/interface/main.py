@@ -2,6 +2,7 @@ import os
 import torch
 import torch.multiprocessing as mp
 from sat2plan.logic.models.ucvgan.ucvgan import UCVGan
+from sat2plan.logic.models.r3gan.r3gan import R3Gan # Added R3Gan import
 from sat2plan.logic.models.samgan.samgan import SAMGAN
 from sat2plan.logic.models.unet.unet import Unet
 from sat2plan.logic.models.basegan.dcgan import run_dcgan
@@ -38,6 +39,28 @@ def train_ucvgan():
                     error_callback=error_callback)
         else:
             UCVGan(0, 1)  # Single GPU or CPU training
+    except Exception as e:
+        print(f"Error during training: {e}")
+        import traceback
+        print("Full traceback:")
+        traceback.print_exc()
+        raise
+
+def train_r3gan():
+    ensure_data_downloaded()
+    G_CFG = Global_Configuration()
+    n_gpus = torch.cuda.device_count()
+    print(f"Number of GPUs: {n_gpus}")
+
+    try:
+        if n_gpus > 1:
+            mp.spawn(R3Gan, # Use R3Gan class
+                    args=(n_gpus,),
+                    nprocs=n_gpus,
+                    join=True,
+                    error_callback=error_callback)
+        else:
+            R3Gan(0, 1)  # Single GPU or CPU training
     except Exception as e:
         print(f"Error during training: {e}")
         import traceback

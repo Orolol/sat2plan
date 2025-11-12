@@ -33,14 +33,14 @@ class Global_Configuration:
 
         self.n_cpu = 6
 
-        self.batch_size = 32
+        self.batch_size = 64  # Augmenté pour H100
         self.n_epochs = 200
         self.sample_interval = 10
 
-        self.image_size = 256
+        self.image_size = 256  # Garder 256 pour l'instant, à augmenter plus tard
         self.channels_img = 3
 
-        self.num_workers = 2
+        self.num_workers = 8  # Augmenté de 2 à 8 pour meilleur débit
         self.l1_lambda = 10.0
         self.lambda_gp = 0.1
 

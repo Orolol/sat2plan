@@ -19,6 +19,7 @@ import torch.nn as nn
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
+from sat2plan.logic.loss.loss import ContentLoss, EdgeLoss, ColorSpecificLoss, HighwaySpecificLoss
 from sat2plan.logic.configuration.config import Model_Configuration, Global_Configuration
 from torch.autograd import Variable
 from torch import autograd
@@ -287,12 +288,12 @@ class UCVGan(nn.Module):
         
         self.starting_epoch = 0
         
-        # Paramètres d'équilibrage optimisés
-        self.n_critic = 3  # Réduction pour plus d'updates du générateur
-        self.l1_lambda = 150.0  # Augmenté initialement, sera schedulé
-        self.lambda_gp = 5.0  # Réduit pour moins contraindre le discriminateur
-        self.g_factor = 0.1  # Augmenté pour plus d'importance adversariale
-        self.max_grad_norm = 0.2  # Légèrement augmenté
+        # Paramètres d'équilibrage optimisés pour routes nettes et autoroutes
+        self.n_critic = 2  # Plus d'updates du générateur pour meilleure qualité
+        self.l1_lambda = 50.0  # RÉDUIT: moins de flou, plus de netteté
+        self.lambda_gp = 10.0  # AUGMENTÉ: meilleure stabilisation du discriminateur
+        self.g_factor = 1.0  # AUGMENTÉ 10x: équilibrer adversarial et L1
+        self.max_grad_norm = 0.5  # Augmenté pour permettre plus de gradients
         
         # Nouveaux paramètres de stabilisation
         self.noise_std = 0.1  # Noise injection initial
@@ -363,11 +364,14 @@ class UCVGan(nn.Module):
             lambda epoch: cosine_warmup_scheduler(epoch, self.warmup_epochs, self.n_epochs)
         )
         
-        # L1 lambda scheduling (diminution progressive)
+        # L1 lambda scheduling (diminution progressive plus agressive)
         self.initial_l1_lambda = self.l1_lambda
         def get_l1_lambda(epoch):
-            """Diminue progressivement le L1 lambda"""
-            decay_factor = max(0.5, 1.0 - (epoch / self.n_epochs) * 0.3)
+            """Diminue progressivement le L1 lambda pour favoriser la créativité"""
+            # Commence à 50, descend jusqu'à 10 (80% de réduction)
+            # Plus agressif: descend rapidement au début puis stabilise
+            progress = min(1.0, epoch / (self.n_epochs * 0.6))  # Atteint le minimum à 60% du training
+            decay_factor = max(0.2, 1.0 - progress * 0.8)  # De 100% à 20%
             return self.initial_l1_lambda * decay_factor
         self.get_l1_lambda = get_l1_lambda
 
@@ -413,6 +417,23 @@ class UCVGan(nn.Module):
         self.scaler = torch.amp.GradScaler(enabled=True)  # Enable mixed precision
         self.BCE_Loss = nn.BCEWithLogitsLoss().to(self.device)
         self.L1_Loss = nn.L1Loss().to(self.device)
+
+        # Initialize ContentLoss with VGG perceptual loss
+        # alpha1: VGG perceptual, alpha2: pixel L1, alpha3: topology
+        self.content_loss = ContentLoss(alpha1=0.5, alpha2=0.3, alpha3=0.2).to(self.device)
+        self.content_loss_weight = 10.0  # Poids de la content loss dans le total
+
+        # Initialize EdgeLoss pour des routes nettes
+        self.edge_loss = EdgeLoss(weight_sobel=1.0, weight_laplacian=0.5).to(self.device)
+        self.edge_loss_weight = 5.0
+
+        # Initialize ColorSpecificLoss pour préserver les couleurs importantes
+        self.color_loss = ColorSpecificLoss(color_threshold=0.4, weight=1.0).to(self.device)
+        self.color_loss_weight = 3.0
+
+        # Initialize HighwaySpecificLoss pour les autoroutes jaunes
+        self.highway_loss = HighwaySpecificLoss(yellow_weight=2.0, width_weight=1.0).to(self.device)
+        self.highway_loss_weight = 5.0
         
         # Initialize loss history lists
         self.Gen_loss = []
@@ -550,7 +571,22 @@ class UCVGan(nn.Module):
                         D_fake = self.netD(x, y_fake)
                         G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
                         L1 = self.L1_Loss(y_fake, y) * current_l1_lambda
-                        G_loss = G_fake_loss * self.g_factor + L1
+
+                        # Ajouter la ContentLoss (VGG perceptual + topology)
+                        content_loss_value = self.content_loss(y_fake, y) * self.content_loss_weight
+
+                        # Ajouter EdgeLoss pour des routes nettes
+                        edge_loss_value = self.edge_loss(y_fake, y) * self.edge_loss_weight
+
+                        # Ajouter ColorSpecificLoss pour préserver les couleurs
+                        color_loss_value = self.color_loss(y_fake, y) * self.color_loss_weight
+
+                        # Ajouter HighwaySpecificLoss pour les autoroutes
+                        highway_loss_value = self.highway_loss(y_fake, y) * self.highway_loss_weight
+
+                        # Combiner toutes les losses
+                        G_loss = (G_fake_loss * self.g_factor + L1 + content_loss_value +
+                                 edge_loss_value + color_loss_value + highway_loss_value)
 
                         # Adaptive gradient scaling
                         scale = torch.max(torch.abs(G_loss)).item()
@@ -578,10 +614,14 @@ class UCVGan(nn.Module):
 
                     if self.rank == 0 and idx % 10 == 0:
                         print(
-                            "[Epoch %d/%d] [Batch %d/%d] [D: disc %.3f | gp %.3f] [G: adv %.3f | L1 %.3f] [%.2f img/s] [lr D: %e] [lr G: %e]"
-                            % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), 
-                               D_loss.item(), gp.item(), G_fake_loss.item(), L1.item(), images_per_sec,
-                               self.OptimizerD.param_groups[0]['lr'], self.OptimizerG.param_groups[0]['lr']))
+                            "[Epoch %d/%d] [Batch %d/%d] [D: %.2f] [G: %.2f (adv:%.2f L1:%.2f cont:%.2f edge:%.2f col:%.2f hw:%.2f)] [%.1f img/s]"
+                            % (epoch+1, self.n_epochs, idx+1, len(self.train_dl),
+                               D_loss.item(), G_loss.item(), G_fake_loss.item(), L1.item()/current_l1_lambda,
+                               content_loss_value.item()/self.content_loss_weight,
+                               edge_loss_value.item()/self.edge_loss_weight,
+                               color_loss_value.item()/self.color_loss_weight,
+                               highway_loss_value.item()/self.highway_loss_weight,
+                               images_per_sec))
                         
                         if idx % 50 == 0:  # Changé de 10 à 100 pour réduire le nombre d'images sauvegardées
                             with torch.no_grad():

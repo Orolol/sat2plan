@@ -25,7 +25,8 @@ from torch import autograd
 import pandas as pd
 import datetime
 from sat2plan.logic.models.ucvgan.model_building import Generator, Discriminator
-from sat2plan.logic.loss.loss import GradientPenalty
+from sat2plan.logic.loss.loss import r1_penalty, VGGPerceptualLoss, feature_matching_loss
+from sat2plan.logic.loss.metrics import ImageQualityMetrics
 from sat2plan.scripts.flow import save_results, save_model, load_model
 from sat2plan.logic.preproc.dataset import Satellite2Map_Data
 import shutil
@@ -85,10 +86,6 @@ class UCVGan(nn.Module):
             if self.cuda:
                 torch.backends.cudnn.benchmark = True
                 
-            # Pour le debug des opérations inplace
-            if self.world_size > 1:
-                torch.autograd.set_detect_anomaly(True)
-
             self.train()
             
         except Exception as e:
@@ -131,10 +128,16 @@ class UCVGan(nn.Module):
             torch.backends.cudnn.allow_tf32 = True
             torch.backends.cudnn.enabled = True
             
-            # Enable optimized SDPA backends in correct order
-            torch.backends.cuda.enable_flash_sdp(True)
-            torch.backends.cuda.enable_mem_efficient_sdp(True) 
-            torch.backends.cuda.enable_math_sdp(True)
+            # Enable optimized SDPA backends when available (PyTorch >= 2.0)
+            try:
+                if hasattr(torch.backends, 'cuda') and hasattr(torch.backends.cuda, 'enable_flash_sdp'):
+                    torch.backends.cuda.enable_flash_sdp(True)
+                if hasattr(torch.backends, 'cuda') and hasattr(torch.backends.cuda, 'enable_mem_efficient_sdp'):
+                    torch.backends.cuda.enable_mem_efficient_sdp(True)
+                if hasattr(torch.backends, 'cuda') and hasattr(torch.backends.cuda, 'enable_math_sdp'):
+                    torch.backends.cuda.enable_math_sdp(True)
+            except Exception as _e:
+                print(f"Warning: could not enable SDPA backends: {_e}")
             
             # Enable channels_last memory format for better performance
             torch.backends.cudnn.benchmark_limit = 10
@@ -179,7 +182,8 @@ class UCVGan(nn.Module):
             print(f"Warning: Error during cleanup: {e}")
         finally:
             # Clean up temporary directory
-            if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
+            # Only rank 0 attempts to remove the shared temp dir to avoid races
+            if getattr(self, 'rank', 0) == 0 and hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
                 try:
                     shutil.rmtree(self.temp_dir)
                 except Exception as e:
@@ -187,31 +191,6 @@ class UCVGan(nn.Module):
 
     def __del__(self):
         self.cleanup()
-
-    def get_cached_tensor(self, shape, dtype=torch.float32):
-        """Récupère un tenseur du cache ou en crée un nouveau"""
-        key = (shape, dtype)
-        if key not in self.tensor_cache:
-            self.tensor_cache[key] = torch.empty(shape, dtype=dtype, device=self.device)
-        return self.tensor_cache[key]
-    
-    def inject_noise(self, tensor, noise_std):
-        """Injecte du bruit gaussien dans les données"""
-        if noise_std > 0 and self.training:
-            noise = torch.randn_like(tensor) * noise_std
-            return tensor + noise
-        return tensor
-    
-    def get_adaptive_labels(self, tensor_like, is_real, epoch):
-        """Génère des labels avec smoothing adaptatif"""
-        if is_real:
-            # Smoothing adaptatif pour les vrais labels (commence à 0.9, monte vers 0.95)
-            smooth_val = min(0.95, self.label_smooth_real + (epoch / self.n_epochs) * 0.05)
-            return torch.full_like(tensor_like, smooth_val)
-        else:
-            # Smoothing adaptatif pour les faux labels (commence à 0.1, descend vers 0.05)
-            smooth_val = max(0.05, self.label_smooth_fake - (epoch / self.n_epochs) * 0.05)
-            return torch.full_like(tensor_like, smooth_val)
 
     # Load datasets from train/val directories
     def dataloading(self):
@@ -286,34 +265,45 @@ class UCVGan(nn.Module):
         print(f"Discriminator device: {next(self.netD.parameters()).device}")
         
         self.starting_epoch = 0
-        
-        # Paramètres d'équilibrage optimisés
-        self.n_critic = 3  # Réduction pour plus d'updates du générateur
-        self.l1_lambda = 150.0  # Augmenté initialement, sera schedulé
-        self.lambda_gp = 5.0  # Réduit pour moins contraindre le discriminateur
-        self.g_factor = 0.1  # Augmenté pour plus d'importance adversariale
-        self.max_grad_norm = 0.2  # Légèrement augmenté
-        
-        # Nouveaux paramètres de stabilisation
-        self.noise_std = 0.1  # Noise injection initial
-        self.noise_decay = 0.95  # Decay du noise par epoch
-        self.label_smooth_real = 0.9  # Label smoothing pour real
-        self.label_smooth_fake = 0.1  # Label smoothing pour fake
-        
-        # Gradient smoothing
+
+        # ---- Objectif: GAN conditionnel hinge + R1 + reconstruction ----
+        # D et G mis à jour 1:1 (n_critic=1). La hinge loss + R1 est stable et
+        # ne nécessite ni label smoothing ni gradient penalty WGAN.
+        self.n_critic = 1
+        self.adv_weight = 1.0      # poids du terme adversarial (hinge)
+        self.l1_lambda = 50.0      # reconstruction pixel L1
+        self.perc_lambda = 10.0    # perceptual VGG (contours nets)
+        self.fm_lambda = 10.0      # feature matching (stabilité + détail)
+        self.r1_gamma = 10.0       # force de la régularisation R1
+        self.d_reg_interval = 16   # R1 "lazy" (StyleGAN2) tous les 16 pas
+        self.max_grad_norm = 1.0   # clipping raisonnable (au lieu de 0.2)
+
+        # EMA du générateur — UNIQUEMENT pour l'échantillonnage / sauvegarde,
+        # jamais pour entraîner le discriminateur.
         self.beta_smoothing = 0.999
         self.generator_ema = Generator(in_channels=3).to(self.device)
         self.generator_ema.load_state_dict(self.netG.state_dict())
         for param in self.generator_ema.parameters():
             param.requires_grad = False
 
-        # Setup distributed training if using CUDA
+        # Compile only the generator (PyTorch 2.0+) BEFORE DDP wrapping.
+        # Le discriminateur reste en eager: la régularisation R1 fait un
+        # double-backward à travers D, ce qui peut casser sous inductor.
+        if hasattr(torch, 'compile'):
+            try:
+                print("Compiling generator with torch.compile()...")
+                self.netG = torch.compile(self.netG, mode="max-autotune")
+                print("Generator successfully compiled")
+            except Exception as e:
+                print(f"Warning: Model compilation failed: {e}")
+                print("Continuing without compilation")
+
+        # Setup distributed training if using CUDA (after possible compilation)
         if self.cuda and self.world_size > 1:
             # Convert BatchNorm to SyncBatchNorm before DDP
             self.netG = nn.SyncBatchNorm.convert_sync_batchnorm(self.netG)
             self.netD = nn.SyncBatchNorm.convert_sync_batchnorm(self.netD)
-            
-            # Wrap models in DistributedDataParallel with specific H100 settings
+
             ddp_kwargs = {
                 'device_ids': [self.rank],
                 'output_device': self.rank,
@@ -321,23 +311,25 @@ class UCVGan(nn.Module):
                 'gradient_as_bucket_view': True,
                 'static_graph': True
             }
-            
             self.netG = nn.parallel.DistributedDataParallel(self.netG, **ddp_kwargs)
             self.netD = nn.parallel.DistributedDataParallel(self.netD, **ddp_kwargs)
             print(f"Models wrapped in DistributedDataParallel on GPU {self.rank}")
 
-        # Initialize optimizers with improved learning rates
-        self.OptimizerD = torch.optim.Adam(
-            self.netD.parameters(), 
-            lr=self.learning_rate_D * 0.2,  # Augmenté de 0.05 à 0.2
-            betas=(self.beta1, 0.999),
-            fused=True  # Use fused Adam implementation for better performance
-        )
+        # Learning rates relevés au régime pix2pix standard. La config était à
+        # 1e-5 (~20x trop faible, le générateur n'apprenait quasiment pas).
+        self.lr_G = 2e-4
+        self.lr_D = 2e-4
         self.OptimizerG = torch.optim.Adam(
-            self.netG.parameters(), 
-            lr=self.learning_rate_G * 1.0,  # Augmenté de 0.5 à 1.0
-            betas=(self.beta1, 0.999),
+            self.netG.parameters(),
+            lr=self.lr_G,
+            betas=(self.beta1, self.beta2),
             fused=True
+        )
+        self.OptimizerD = torch.optim.Adam(
+            self.netD.parameters(),
+            lr=self.lr_D,
+            betas=(self.beta1, self.beta2),
+            fused=True  # fused Adam pour la perf sur GPU récents
         )
 
         # Scheduler cosine avec warmup amélioré
@@ -363,37 +355,6 @@ class UCVGan(nn.Module):
             lambda epoch: cosine_warmup_scheduler(epoch, self.warmup_epochs, self.n_epochs)
         )
         
-        # L1 lambda scheduling (diminution progressive)
-        self.initial_l1_lambda = self.l1_lambda
-        def get_l1_lambda(epoch):
-            """Diminue progressivement le L1 lambda"""
-            decay_factor = max(0.5, 1.0 - (epoch / self.n_epochs) * 0.3)
-            return self.initial_l1_lambda * decay_factor
-        self.get_l1_lambda = get_l1_lambda
-
-        # Compile models if using PyTorch 2.0+
-        if hasattr(torch, 'compile'):
-            try:
-                print("Compiling models with torch.compile()...")
-                # Use inductor backend for H100
-                compile_config = {
-                    "mode": "default",
-                    # "backend": "inductor",
-                    # "fullgraph": False,  # Changed to False to avoid CUDA graph issues
-                    # "dynamic": True,  # Changed to True for more flexible execution
-                    # "options": {
-                    #     "max_autotune": True,
-                    #     "epilogue_fusion": True,
-                    #     "max_fusion_size": 4,
-                    # }
-                }
-                self.netG = torch.compile(self.netG, **compile_config)
-                self.netD = torch.compile(self.netD, **compile_config)
-                print("Models successfully compiled")
-            except Exception as e:
-                print(f"Warning: Model compilation failed: {e}")
-                print("Continuing without compilation")
-
         # Load model and optimizer states if requested
         if self.load_model:
             try:
@@ -409,10 +370,14 @@ class UCVGan(nn.Module):
                 print("Starting from scratch")
                 self.starting_epoch = 0
 
-        # Initialize losses and metrics tracking
-        self.scaler = torch.amp.GradScaler(enabled=True)  # Enable mixed precision
-        self.BCE_Loss = nn.BCEWithLogitsLoss().to(self.device)
+        # Losses. On utilise BF16 (Blackwell) via autocast: pas de GradScaler
+        # nécessaire (le bf16 a la même plage dynamique que le fp32).
         self.L1_Loss = nn.L1Loss().to(self.device)
+        self.perceptual = VGGPerceptualLoss().to(self.device)
+        self.perceptual.eval()
+
+        # Métriques de qualité (FID/LPIPS/SSIM) — uniquement rank 0 (validation).
+        self.metrics = ImageQualityMetrics(self.device) if self.rank == 0 else None
         
         # Initialize loss history lists
         self.Gen_loss = []
@@ -449,9 +414,6 @@ class UCVGan(nn.Module):
                 print("Total params in Generator:", pytorch_total_params_G)
                 print("Total params in Discriminator:", pytorch_total_params_D)
 
-            gradient_penalty = GradientPenalty(self.batch_size, self.lambda_gp, device=self.device)
-            loss = []
-
             # Pour le calcul du throughput
             import time
             batch_times = []
@@ -476,95 +438,76 @@ class UCVGan(nn.Module):
                     num_batches += 1
                     current_batch_size = x.size(0)
                     
-                    # Move data to appropriate device and inject noise for stability
+                    # Move data to appropriate device
                     x = x.to(self.device, non_blocking=True)
                     y = y.to(self.device, non_blocking=True)
-                    
-                    # Noise injection pour stabilisation (decay progressif)
-                    current_noise_std = self.noise_std * (self.noise_decay ** epoch)
-                    x = self.inject_noise(x, current_noise_std * 0.5)  # Moins de bruit sur l'input
-                    
                     total_images += current_batch_size
-                    
-                    # Update L1 lambda dynamically
-                    current_l1_lambda = self.get_l1_lambda(epoch)
 
-                    # Update EMA model first
+                    autocast = lambda: torch.autocast('cuda', dtype=torch.bfloat16)
+
+                    ############## Train Discriminator (hinge + R1) ##############
+                    for p in self.netD.parameters():
+                        p.requires_grad = True
+                    self.OptimizerD.zero_grad(set_to_none=True)
+
+                    # Faux générés par le générateur COURANT (jamais l'EMA), détachés.
+                    with torch.no_grad(), autocast():
+                        y_fake = self.netG(x)
+                    y_fake = y_fake.detach()
+
+                    with autocast():
+                        D_real = self.netD(x, y)
+                        D_fake = self.netD(x, y_fake)
+                        # Hinge loss
+                        D_loss = (torch.relu(1.0 - D_real).mean()
+                                  + torch.relu(1.0 + D_fake).mean())
+
+                    D_loss.backward()
+
+                    # Régularisation R1 "lazy" (tous les d_reg_interval pas), en fp32
+                    r1 = torch.zeros((), device=self.device)
+                    if idx % self.d_reg_interval == 0:
+                        y_real = y.detach().requires_grad_(True)
+                        D_real_r1 = self.netD(x, y_real)
+                        r1 = r1_penalty(D_real_r1, y_real)
+                        (self.r1_gamma * 0.5 * r1 * self.d_reg_interval).backward()
+
+                    torch.nn.utils.clip_grad_norm_(self.netD.parameters(), max_norm=self.max_grad_norm)
+                    self.OptimizerD.step()
+
+                    ############## Train Generator ##############
+                    for p in self.netD.parameters():
+                        p.requires_grad = False
+                    self.OptimizerG.zero_grad(set_to_none=True)
+
+                    with autocast():
+                        y_fake = self.netG(x)
+                        D_fake, feats_fake = self.netD(x, y_fake, return_features=True)
+                        with torch.no_grad():
+                            _, feats_real = self.netD(x, y, return_features=True)
+
+                        G_adv = -D_fake.mean()                       # hinge generator
+                        L1 = self.L1_Loss(y_fake, y)
+                        perc = self.perceptual(y_fake, y)
+                        fm = feature_matching_loss(feats_fake, feats_real)
+                        G_loss = (self.adv_weight * G_adv
+                                  + self.l1_lambda * L1
+                                  + self.perc_lambda * perc
+                                  + self.fm_lambda * fm)
+
+                    G_loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.netG.parameters(), max_norm=self.max_grad_norm)
+                    self.OptimizerG.step()
+
+                    # Mise à jour de l'EMA (sert uniquement à l'échantillonnage)
                     with torch.no_grad():
                         for ema_param, current_param in zip(self.generator_ema.parameters(), self.netG.parameters()):
                             ema_param.data.mul_(self.beta_smoothing).add_(
                                 current_param.data, alpha=(1 - self.beta_smoothing)
                             )
 
-                    ############## Train Discriminator ##############
-                    # Train discriminator every n_critic iterations
-                    if idx % self.n_critic == 0:
-                        for p in self.netD.parameters():
-                            p.requires_grad = True
-                        
-                        self.OptimizerD.zero_grad(set_to_none=True)
-                        
-                        with torch.amp.autocast(device_type='cuda'):
-                            # Use EMA generator for discriminator
-                            with torch.no_grad():
-                                y_fake_ema = self.generator_ema(x)
-                                y_fake_ema = y_fake_ema.detach().clone()  # Detach and clone
-                            
-                            # Inject noise in discriminator inputs pour régularisation
-                            x_noisy = self.inject_noise(x, current_noise_std)
-                            y_noisy = self.inject_noise(y, current_noise_std)
-                            y_fake_noisy = self.inject_noise(y_fake_ema.detach(), current_noise_std)
-                            
-                            D_real = self.netD(x_noisy, y_noisy)
-                            D_fake = self.netD(x_noisy, y_fake_noisy)
-                            
-                            # Labels adaptatifs avec smoothing amélioré
-                            real_label = self.get_adaptive_labels(D_real, True, epoch)
-                            fake_label = self.get_adaptive_labels(D_fake, False, epoch)
-                            
-                            D_real_loss = self.BCE_Loss(D_real + self.eps, real_label)
-                            D_fake_loss = self.BCE_Loss(D_fake + self.eps, fake_label)
-                            D_loss = (D_fake_loss + D_real_loss) / 2
-                            
-                            gp = gradient_penalty(self.netD, y.detach(), y_fake_ema.detach(), x)
-                            # Clamping progressif du gradient penalty (plus permissif)
-                            max_gp = min(5.0, 2.0 + (epoch / 50) * 3.0)  # Augmente graduellement jusqu'à 5.0
-                            gp = torch.clamp(gp, -max_gp, max_gp)
-                            D_loss_W = D_loss + gp
-         
-                        self.scaler.scale(D_loss_W).backward()
-                        self.scaler.unscale_(self.OptimizerD)
-                        torch.nn.utils.clip_grad_norm_(self.netD.parameters(), max_norm=self.max_grad_norm)
-                        self.scaler.step(self.OptimizerD)
-                        
-                        # Disable discriminator gradients for generator update
-                        for p in self.netD.parameters():
-                            p.requires_grad = False
-
-                    ############## Train Generator ##############
-                    self.OptimizerG.zero_grad(set_to_none=True)
-
-                    with torch.amp.autocast(device_type='cuda'):
-                        # Generate fake images for generator training (with gradients)
-                        y_fake = self.netG(x)
-                        D_fake = self.netD(x, y_fake)
-                        G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
-                        L1 = self.L1_Loss(y_fake, y) * current_l1_lambda
-                        G_loss = G_fake_loss * self.g_factor + L1
-
-                        # Adaptive gradient scaling
-                        scale = torch.max(torch.abs(G_loss)).item()
-                        if scale > 1.0:
-                            G_loss = G_loss / scale
-
-                        self.scaler.scale(G_loss).backward()
-                        self.scaler.unscale_(self.OptimizerG)
-                        torch.nn.utils.clip_grad_norm_(self.netG.parameters(), max_norm=self.max_grad_norm)
-                        self.scaler.step(self.OptimizerG)
-                        self.scaler.update()
-
                     # Accumulate losses
-                    epoch_d_loss += D_loss_W.item()
+                    epoch_d_loss += D_loss.item()
                     epoch_g_loss += G_loss.item()
 
                     # Calculate and log throughput
@@ -578,22 +521,23 @@ class UCVGan(nn.Module):
 
                     if self.rank == 0 and idx % 10 == 0:
                         print(
-                            "[Epoch %d/%d] [Batch %d/%d] [D: disc %.3f | gp %.3f] [G: adv %.3f | L1 %.3f] [%.2f img/s] [lr D: %e] [lr G: %e]"
-                            % (epoch+1, self.n_epochs, idx+1, len(self.train_dl), 
-                               D_loss.item(), gp.item(), G_fake_loss.item(), L1.item(), images_per_sec,
-                               self.OptimizerD.param_groups[0]['lr'], self.OptimizerG.param_groups[0]['lr']))
-                        
-                        if idx % 50 == 0:  # Changé de 10 à 100 pour réduire le nombre d'images sauvegardées
-                            with torch.no_grad():
-                                with torch.amp.autocast('cuda' if self.cuda else 'cpu'):
-                                    concatenated_images = torch.cat((x[:4], y_fake[:4], y[:4]), dim=2)
-                                save_image(concatenated_images, f"images/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
+                            "[Epoch %d/%d] [Batch %d/%d] [D: hinge %.3f | r1 %.3f] [G: adv %.3f | L1 %.3f | perc %.3f | fm %.3f] [%.1f img/s]"
+                            % (epoch+1, self.n_epochs, idx+1, len(self.train_dl),
+                               D_loss.item(), r1.item(), G_adv.item(), L1.item(), perc.item(), fm.item(),
+                               images_per_sec))
+
+                        if idx % 50 == 0:
+                            with torch.no_grad(), autocast():
+                                y_sample = self.generator_ema(x[:4])
+                                concatenated_images = torch.cat((x[:4], y_sample, y[:4]), dim=2)
+                            save_image(concatenated_images.float(), f"images/{str(epoch) + '-' + str(idx)}.png", nrow=3, normalize=True)
 
                 # Synchronize losses across GPUs
                 if self.world_size > 1:
-                    dist.all_reduce(torch.tensor([epoch_d_loss, epoch_g_loss], device=self.device))
-                    epoch_d_loss /= self.world_size
-                    epoch_g_loss /= self.world_size
+                    loss_tensor = torch.tensor([epoch_d_loss, epoch_g_loss], device=self.device)
+                    dist.all_reduce(loss_tensor, op=dist.ReduceOp.SUM)
+                    epoch_d_loss = loss_tensor[0].item() / self.world_size
+                    epoch_g_loss = loss_tensor[1].item() / self.world_size
 
                 if self.rank == 0:
                     # Calculate average epoch losses
@@ -605,31 +549,37 @@ class UCVGan(nn.Module):
                     epoch_throughput = total_images / epoch_time
                     print(f"Epoch {epoch+1} completed. Average throughput: {epoch_throughput:.2f} images/s")
 
-                    if epoch % 5 == 0:
-                        loss_df = pd.DataFrame(loss, columns=["epoch", "batch", "loss_g", "loss_d"])
-                        loss_df.to_csv("save/loss/loss.csv", mode="a", header=(epoch == 0))
+                    # Optional: write detailed per-batch losses; currently disabled to avoid heavy I/O
+                    # If needed, collect and write aggregated metrics only
 
                     # Validation and model saving
                     print("-- Validation Test --")
                     self.validation()
-                    val_loss = self.val_Gen_loss[-1] + self.val_Dis_loss[-1]
+                    m = self.last_metrics
+                    # Sélection du modèle: LPIPS (perceptuel appris, le mieux corrélé
+                    # à la qualité perçue) si dispo, sinon repli sur L1 + perceptual VGG.
+                    if 'lpips' in m:
+                        val_score = m['lpips']
+                        score_name = "LPIPS"
+                    else:
+                        val_score = self.val_Gen_L1_loss[-1] + self.val_Gen_fake_loss[-1]
+                        score_name = "L1+perc"
+                    metric_str = "  ".join(
+                        f"{k.upper()}: {v:.4f}" for k, v in m.items()
+                    ) or "—"
                     print(f"\n{'='*60}")
                     print(f"EPOCH {epoch+1}/{self.n_epochs} VALIDATION SUMMARY")
                     print(f"{'='*60}")
-                    print(f"📊 Losses:")
-                    print(f"   • Discriminator Total: {self.val_Dis_loss[-1]:.4f} (Real: {self.val_D_real_loss[-1]:.4f} + Fake: {self.val_D_fake_loss[-1]:.4f})")
-                    print(f"   • Generator Total: {self.val_Gen_loss[-1]:.4f} (Adv: {self.val_Gen_fake_loss[-1]:.4f} + L1: {self.val_Gen_L1_loss[-1]:.4f})")
-                    print(f"   • Combined Val Loss: {val_loss:.4f}")
-                    print(f"🎯 Training Params:")
-                    print(f"   • Current L1 Lambda: {current_l1_lambda:.1f}")
-                    print(f"   • Noise Std: {current_noise_std:.6f}")
-                    print(f"   • LR D/G: {self.OptimizerD.param_groups[0]['lr']:.2e} / {self.OptimizerG.param_groups[0]['lr']:.2e}")
+                    print(f"📐 Qualité: {metric_str}")
+                    print(f"📊 L1: {self.val_Gen_L1_loss[-1]:.4f}  |  Perceptual: {self.val_Gen_fake_loss[-1]:.4f}  |  D hinge: {self.val_Dis_loss[-1]:.4f}")
+                    print(f"🏅 Score sélection ({score_name}): {val_score:.4f}  (best: {self.best_loss:.4f})")
+                    print(f"🎯 LR D/G: {self.OptimizerD.param_groups[0]['lr']:.2e} / {self.OptimizerG.param_groups[0]['lr']:.2e}")
                     print(f"⚡ Performance: {epoch_throughput:.2f} images/sec")
                     print(f"{'='*60}\n")
 
                     # Early stopping check
-                    if val_loss < self.best_loss:
-                        self.best_loss = val_loss
+                    if val_score < self.best_loss:
+                        self.best_loss = val_score
                         self.patience_counter = 0
                         if self.save_model_bool:
                             save_model(
@@ -650,7 +600,8 @@ class UCVGan(nn.Module):
                             Gen_loss=avg_epoch_g_loss,
                             Dis_loss=avg_epoch_d_loss,
                             Val_Gen_loss=self.val_Gen_loss[-1],
-                            Val_Dis_loss=self.val_Dis_loss[-1]
+                            Val_Dis_loss=self.val_Dis_loss[-1],
+                            **self.last_metrics
                         ))
 
                     if self.patience_counter >= self.patience:
@@ -672,7 +623,8 @@ class UCVGan(nn.Module):
                     Gen_loss=avg_epoch_g_loss,
                     Dis_loss=avg_epoch_d_loss,
                     Val_Gen_loss=self.val_Gen_loss[-1],
-                    Val_Dis_loss=self.val_Dis_loss[-1]
+                    Val_Dis_loss=self.val_Dis_loss[-1],
+                    **getattr(self, 'last_metrics', {})
                 ))
                 params_json.close()
 
@@ -688,78 +640,55 @@ class UCVGan(nn.Module):
         self.netG.eval()
         self.netD.eval()
 
-        sum_D_loss = 0
-        sum_G_loss = 0
-        sum_G_fake_loss = 0
-        sum_G_L1_loss = 0
-        sum_D_real_loss = 0
-        sum_D_fake_loss = 0
+        sum_D_loss = 0.0      # hinge D (monitoring)
+        sum_L1 = 0.0          # qualité: reconstruction
+        sum_perc = 0.0        # qualité: perceptuel VGG
         num_batches = 0
 
-        with torch.no_grad(), torch.amp.autocast('cuda' if self.cuda else 'cpu'):
+        if self.metrics is not None:
+            self.metrics.reset()
+
+        with torch.no_grad():
             for idx, (x, y, _) in enumerate(self.val_dl):
-                # Move to device and free memory from previous batch
                 x = x.to(self.device, non_blocking=True)
                 y = y.to(self.device, non_blocking=True)
-                
-                # Generator forward pass
-                y_fake = self.netG(x)
-                
-                # Discriminator losses
-                D_real = self.netD(x, y)
-                D_fake = self.netD(x, y_fake)
-                
-                # Utiliser le même label smoothing que l'entraînement pour la validation
-                real_label = self.get_adaptive_labels(D_real, True, 0)  # Epoch 0 pour valeurs de base
-                fake_label = self.get_adaptive_labels(D_fake, False, 0)
-                
-                D_real_loss = self.BCE_Loss(D_real, real_label)
-                D_fake_loss = self.BCE_Loss(D_fake, fake_label)
-                D_loss = (D_real_loss + D_fake_loss) / 2
-                
-                # Generator losses
-                G_fake_loss = self.BCE_Loss(D_fake, torch.ones_like(D_fake))
-                G_L1 = self.L1_Loss(y_fake, y) * self.l1_lambda
-                G_loss = G_fake_loss + G_L1
-                
-                # Accumulate batch losses
-                sum_D_loss += D_loss.item()
-                sum_G_loss += G_loss.item()
-                sum_G_fake_loss += G_fake_loss.item()
-                sum_G_L1_loss += G_L1.item()
-                sum_D_real_loss += D_real_loss.item()
-                sum_D_fake_loss += D_fake_loss.item()
-                num_batches += 1
-                
-                # Optimized memory cleanup
-                del y_fake, D_real, D_fake, D_loss, G_loss, G_L1
-                if idx % 5 == 0:  # Less frequent but more efficient cleanup
-                    torch.cuda.empty_cache()
 
-        # Calculer les moyennes et métriques additionnelles
+                # Forward sous bf16; on échantillonne avec l'EMA (le modèle servi)
+                with torch.autocast('cuda', dtype=torch.bfloat16):
+                    y_fake = self.generator_ema(x)
+                    D_real = self.netD(x, y)
+                    D_fake = self.netD(x, y_fake)
+                    D_loss = (torch.relu(1.0 - D_real).mean()
+                              + torch.relu(1.0 + D_fake).mean())
+                    L1 = self.L1_Loss(y_fake, y)
+                    perc = self.perceptual(y_fake, y)
+
+                # Métriques en fp32, hors autocast (réseaux Inception/VGG internes)
+                if self.metrics is not None:
+                    self.metrics.update(y_fake, y)
+
+                sum_D_loss += D_loss.item()
+                sum_L1 += L1.item()
+                sum_perc += perc.item()
+                num_batches += 1
+
         avg_D_loss = sum_D_loss / num_batches
-        avg_G_loss = sum_G_loss / num_batches
-        avg_G_fake_loss = sum_G_fake_loss / num_batches
-        avg_G_L1_loss = sum_G_L1_loss / num_batches
-        avg_D_real_loss = sum_D_real_loss / num_batches
-        avg_D_fake_loss = sum_D_fake_loss / num_batches
-        
-        # Métrique de balance D/G (idéalement proche de 1.0)
-        d_g_balance = avg_D_loss / max(avg_G_loss, 1e-8)
-        if self.rank == 0:
-            print(f"🔍 Validation D/G Balance: {d_g_balance:.3f} (target: ~1.0)")
-        
-        # Stocker les résultats
+        avg_L1 = sum_L1 / num_batches
+        avg_perc = sum_perc / num_batches
+
+        self.last_metrics = self.metrics.compute() if self.metrics is not None else {}
+
+        # Stocker les résultats. On réutilise les listes existantes:
+        #   val_Gen_L1_loss  -> L1 brute (qualité)
+        #   val_Gen_fake_loss -> perceptual (qualité)
+        #   val_Dis_loss     -> hinge D (monitoring)
         self.val_Dis_loss.append(avg_D_loss)
-        self.val_Gen_loss.append(avg_G_loss)
-        self.val_Gen_fake_loss.append(avg_G_fake_loss)
-        self.val_Gen_L1_loss.append(avg_G_L1_loss)
-        self.val_D_real_loss.append(avg_D_real_loss)
-        self.val_D_fake_loss.append(avg_D_fake_loss)
-        
+        self.val_Gen_loss.append(avg_L1 + avg_perc)
+        self.val_Gen_fake_loss.append(avg_perc)
+        self.val_Gen_L1_loss.append(avg_L1)
+        self.val_D_real_loss.append(avg_D_loss)
+        self.val_D_fake_loss.append(avg_D_loss)
+
         # Retour en mode train
         self.netG.train()
         self.netD.train()
-        
-        # Forcer le nettoyage de la mémoire à la fin
-        torch.cuda.empty_cache()

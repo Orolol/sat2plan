@@ -6,36 +6,43 @@ import torchvision.transforms as transforms
 import random
 
 class Satellite2Map_Data(Dataset):
-    def __init__(self, root, image_size=256):
+    def __init__(self, root, image_size=256, verbose=False):
         self.root = root
         self.image_size = image_size
+        self.verbose = verbose
         
         # Filtrer uniquement les fichiers existants et valides
         all_files = os.listdir(self.root)
         self.list_files = []
         
-        print(f"Scanning {len(all_files)} files in {root}...")
+        if self.verbose:
+            print(f"Scanning {len(all_files)} files in {root}...")
         for file in all_files:
             file_path = os.path.join(self.root, file)
             if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
                 try:
-                    print(f"Checking file: {file_path}")
+                    if self.verbose:
+                        print(f"Checking file: {file_path}")
                     # Test rapide d'ouverture pour vérifier l'intégrité
                     # with Image.open(file_path) as img:
                     #     img.verify()  # Vérification de l'intégrité
                     self.list_files.append(file)
                 except Exception as e:
-                    print(f"Skipping corrupted file {file}: {e}")
+                    if self.verbose:
+                        print(f"Skipping corrupted file {file}: {e}")
                     # Supprimer le fichier corrompu
                     try:
                         os.remove(file_path)
-                        print(f"Deleted corrupted file: {file_path}")
+                        if self.verbose:
+                            print(f"Deleted corrupted file: {file_path}")
                     except:
                         pass
             else:
-                print(f"Skipping missing or empty file: {file}")
+                if self.verbose:
+                    print(f"Skipping missing or empty file: {file}")
         
-        print(f"Found {len(self.list_files)} valid files out of {len(all_files)}")
+        if self.verbose:
+            print(f"Found {len(self.list_files)} valid files out of {len(all_files)}")
         
         # Transformations de base (redimensionnement et normalisation)
         self.resize_transform = transforms.Resize((image_size, image_size), antialias=True)

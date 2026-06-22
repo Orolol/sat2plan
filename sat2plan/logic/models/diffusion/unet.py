@@ -1,8 +1,18 @@
+"""UNet conditionnel pour diffusion sat→carte (style Palette / ADM).
+
+Conditionnement par **concaténation** : l'entrée est `cat([x_t, cond], dim=1)`
+(6 canaux), ce qui préserve l'alignement spatial pixel-à-pixel — crucial pour une
+tâche appariée, contrairement à un conditionnement par cross-attention global.
+
+Briques : ResnetBlock (GroupNorm + SiLU + modulation FiLM par le temps),
+self-attention multi-tête aux basses résolutions, skips ADM-style.
+"""
+
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import math
 
 class SinusoidalPositionEmbeddings(nn.Module):
     def __init__(self, dim):
@@ -12,167 +22,164 @@ class SinusoidalPositionEmbeddings(nn.Module):
     def forward(self, time):
         device = time.device
         half_dim = self.dim // 2
-        embeddings = math.log(10000) / (half_dim - 1)
-        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
-        embeddings = time[:, None] * embeddings[None, :]
-        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
-        return embeddings
+        emb = math.log(10000) / (half_dim - 1)
+        emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
+        emb = time[:, None].float() * emb[None, :]
+        return torch.cat((emb.sin(), emb.cos()), dim=-1)
 
-class Block(nn.Module):
-    def __init__(self, in_ch, out_ch, time_emb_dim, up=False):
+
+def Normalize(channels):
+    # Plus grand nombre de groupes <= 32 qui divise `channels` (robuste à toute largeur).
+    num_groups = next((g for g in (32, 16, 8, 4, 2, 1) if channels % g == 0), 1)
+    return nn.GroupNorm(num_groups=num_groups, num_channels=channels, eps=1e-6)
+
+
+class ResnetBlock(nn.Module):
+    """Bloc résiduel avec modulation FiLM (scale-shift) du temps."""
+
+    def __init__(self, in_ch, out_ch, time_dim, dropout=0.0):
         super().__init__()
-        self.time_mlp = nn.Linear(time_emb_dim, out_ch)
-        self.up = up
-        
-        if up:
-            self.conv1 = nn.Conv2d(2*in_ch, out_ch, 3, padding=1)
-            self.transform = nn.ConvTranspose2d(out_ch, out_ch, 4, 2, 1)
-        else:
-            self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
-            self.transform = nn.Conv2d(out_ch, out_ch, 4, 2, 1)
-            
+        self.norm1 = Normalize(in_ch)
+        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
+        self.time_proj = nn.Linear(time_dim, out_ch * 2)
+        self.norm2 = Normalize(out_ch)
+        self.dropout = nn.Dropout(dropout)
         self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1)
-        self.bnorm1 = nn.BatchNorm2d(out_ch)
-        self.bnorm2 = nn.BatchNorm2d(out_ch)
-        self.relu = nn.ReLU()
-        
-    def forward(self, x, t, skip=None):
-        if self.up and skip is not None:
-            x = torch.cat([x, skip], dim=1)
-            
-        # First Conv
-        h = self.bnorm1(self.relu(self.conv1(x)))
-        # Time embedding
-        time_emb = self.relu(self.time_mlp(t))
-        # Extend last 2 dimensions
-        time_emb = time_emb[(..., ) + (None, ) * 2]
-        # Add time channel
-        h = h + time_emb
-        # Second Conv
-        h = self.bnorm2(self.relu(self.conv2(h)))
-        # Down or Upsample
-        return self.transform(h)
+        self.skip = nn.Conv2d(in_ch, out_ch, 1) if in_ch != out_ch else nn.Identity()
 
-class CrossAttention(nn.Module):
-    def __init__(self, query_dim, context_dim, heads=8, dim_head=64):
+    def forward(self, x, t):
+        h = self.conv1(F.silu(self.norm1(x)))
+        scale, shift = self.time_proj(F.silu(t)).chunk(2, dim=1)
+        h = self.norm2(h) * (1 + scale[:, :, None, None]) + shift[:, :, None, None]
+        h = self.conv2(self.dropout(F.silu(h)))
+        return h + self.skip(x)
+
+
+class AttnBlock(nn.Module):
+    """Self-attention spatiale multi-tête (résiduelle)."""
+
+    def __init__(self, channels, heads=8):
         super().__init__()
-        inner_dim = dim_head * heads
-        self.scale = dim_head ** -0.5
         self.heads = heads
+        self.norm = Normalize(channels)
+        self.qkv = nn.Conv2d(channels, channels * 3, 1)
+        self.proj = nn.Conv2d(channels, channels, 1)
 
-        self.to_q = nn.Linear(query_dim, inner_dim, bias=False)
-        self.to_k = nn.Linear(context_dim, inner_dim, bias=False)
-        self.to_v = nn.Linear(context_dim, inner_dim, bias=False)
-        self.to_out = nn.Linear(inner_dim, query_dim)
-
-    def forward(self, x, context):
-        h = self.heads
-
-        q = self.to_q(x)
-        k = self.to_k(context)
-        v = self.to_v(context)
-
-        q, k, v = map(lambda t: t.reshape(t.shape[0], -1, h, t.shape[-1] // h).transpose(1, 2), (q, k, v))
-
-        # Efficient attention using Flash Attention or memory-efficient attention
-        out = F.scaled_dot_product_attention(q, k, v)
-        
-        out = out.transpose(1, 2).reshape(out.shape[0], -1, q.shape[-1] * h)
-        return self.to_out(out)
-
-class SpatialTransformer(nn.Module):
-    def __init__(self, channels, context_dim, num_heads=8):
-        super().__init__()
-        self.channels = channels
-        self.norm = nn.GroupNorm(32, channels)
-        self.attention = CrossAttention(channels, context_dim, heads=num_heads)
-
-    def forward(self, x, context):
+    def forward(self, x):
         b, c, h, w = x.shape
-        x = self.norm(x)
-        x = x.reshape(b, c, -1).transpose(1, 2)
-        x = self.attention(x, context)
-        x = x.transpose(1, 2).reshape(b, c, h, w)
-        return x
+        qkv = self.qkv(self.norm(x))
+        q, k, v = qkv.chunk(3, dim=1)
+
+        def reshape_heads(t):
+            return t.reshape(b, self.heads, c // self.heads, h * w).transpose(2, 3)
+
+        q, k, v = map(reshape_heads, (q, k, v))
+        out = F.scaled_dot_product_attention(q, k, v)
+        out = out.transpose(2, 3).reshape(b, c, h, w)
+        return x + self.proj(out)
+
+
+class Downsample(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.conv = nn.Conv2d(channels, channels, 3, stride=2, padding=1)
+
+    def forward(self, x):
+        return self.conv(x)
+
+
+class Upsample(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.conv = nn.Conv2d(channels, channels, 3, padding=1)
+
+    def forward(self, x):
+        return self.conv(F.interpolate(x, scale_factor=2, mode="nearest"))
+
 
 class ConditionalUNet(nn.Module):
-    def __init__(self, in_channels=3, out_channels=3, time_dim=256, context_dim=768):
+    def __init__(self, in_channels=3, cond_channels=3, out_channels=3, base=64,
+                 ch_mult=(1, 2, 2, 4, 4), num_res_blocks=2, attn_resolutions=(32, 16),
+                 time_dim=256, image_size=256, dropout=0.0):
         super().__init__()
-        
-        # Initial projection
-        self.init_conv = nn.Conv2d(in_channels, 64, 3, padding=1)
-        
-        # Encoder for conditioning image (satellite)
-        self.context_encoder = nn.Sequential(
-            nn.Conv2d(in_channels, 64, 3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(64, 128, 4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(128, 256, 4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(256, context_dim, 4, stride=2, padding=1),
-            nn.ReLU(),
-        )
-        
-        # Time embedding
-        self.time_dim = time_dim
         self.time_mlp = nn.Sequential(
-            SinusoidalPositionEmbeddings(time_dim),
+            SinusoidalPositionEmbeddings(base),
+            nn.Linear(base, time_dim),
+            nn.SiLU(),
             nn.Linear(time_dim, time_dim),
-            nn.ReLU()
         )
-        
-        # Downsampling
-        self.down1 = Block(64, 128, time_dim)
-        self.sa1 = SpatialTransformer(128, context_dim)
-        self.down2 = Block(128, 256, time_dim)
-        self.sa2 = SpatialTransformer(256, context_dim)
-        self.down3 = Block(256, 512, time_dim)
-        self.sa3 = SpatialTransformer(512, context_dim)
+        self.in_conv = nn.Conv2d(in_channels + cond_channels, base, 3, padding=1)
 
-        # Bottleneck
-        self.bot1 = nn.Conv2d(512, 512, 3, padding=1)
-        self.bot2 = nn.Conv2d(512, 512, 3, padding=1)
-        self.bot3 = nn.Conv2d(512, 512, 3, padding=1)
-        self.bot_sa = SpatialTransformer(512, context_dim)
+        num_levels = len(ch_mult)
+        skip_channels = [base]
+        cur_ch = base
+        cur_res = image_size
 
-        # Upsampling
-        self.up1 = Block(512, 256, time_dim, up=True)
-        self.sa4 = SpatialTransformer(256, context_dim)
-        self.up2 = Block(256, 128, time_dim, up=True)
-        self.sa5 = SpatialTransformer(128, context_dim)
-        self.up3 = Block(128, 64, time_dim, up=True)
-        self.sa6 = SpatialTransformer(64, context_dim)
-        
-        # Final conv
-        self.final_conv = nn.Conv2d(64, out_channels, 3, padding=1)
+        # ---------- Encoder ----------
+        self.down_blocks = nn.ModuleList()
+        for level, mult in enumerate(ch_mult):
+            out_ch = base * mult
+            for _ in range(num_res_blocks):
+                self.down_blocks.append(nn.ModuleDict({
+                    "res": ResnetBlock(cur_ch, out_ch, time_dim, dropout),
+                    "attn": AttnBlock(out_ch) if cur_res in attn_resolutions else nn.Identity(),
+                }))
+                cur_ch = out_ch
+                skip_channels.append(cur_ch)
+            if level != num_levels - 1:
+                self.down_blocks.append(nn.ModuleDict({"downsample": Downsample(cur_ch)}))
+                skip_channels.append(cur_ch)
+                cur_res //= 2
 
-    def forward(self, x, t, context):
-        # Encode conditioning image
-        context_features = self.context_encoder(context)
-        b, c, h, w = context_features.shape
-        context_features = context_features.reshape(b, c, -1).transpose(1, 2)  # (b, h*w, c)
-        
-        # Initial conv
-        x = self.init_conv(x)
-        
-        # Time embedding
+        # ---------- Middle ----------
+        self.mid_res1 = ResnetBlock(cur_ch, cur_ch, time_dim, dropout)
+        self.mid_attn = AttnBlock(cur_ch)
+        self.mid_res2 = ResnetBlock(cur_ch, cur_ch, time_dim, dropout)
+
+        # ---------- Decoder ----------
+        self.up_blocks = nn.ModuleList()
+        for level, mult in reversed(list(enumerate(ch_mult))):
+            out_ch = base * mult
+            for _ in range(num_res_blocks + 1):
+                self.up_blocks.append(nn.ModuleDict({
+                    "res": ResnetBlock(cur_ch + skip_channels.pop(), out_ch, time_dim, dropout),
+                    "attn": AttnBlock(out_ch) if cur_res in attn_resolutions else nn.Identity(),
+                }))
+                cur_ch = out_ch
+            if level != 0:
+                self.up_blocks.append(nn.ModuleDict({"upsample": Upsample(cur_ch)}))
+                cur_res *= 2
+
+        self.out_norm = Normalize(cur_ch)
+        self.out_conv = nn.Conv2d(cur_ch, out_channels, 3, padding=1)
+        # Sortie initialisée à zéro : départ d'entraînement stable (prédit 0).
+        nn.init.zeros_(self.out_conv.weight)
+        nn.init.zeros_(self.out_conv.bias)
+
+    def forward(self, x, t):
         t = self.time_mlp(t)
-        
-        # Unet
-        # Downsample
-        d1 = self.sa1(self.down1(x, t), context_features)
-        d2 = self.sa2(self.down2(d1, t), context_features)
-        d3 = self.sa3(self.down3(d2, t), context_features)
-        
-        # Bottleneck
-        bot = F.relu(self.bot1(d3))
-        bot = F.relu(self.bot2(bot))
-        bot = self.bot_sa(F.relu(self.bot3(bot)), context_features)
-        
-        # Upsample with skip connections
-        up1 = self.sa4(self.up1(bot, t, d3), context_features)
-        up2 = self.sa5(self.up2(up1, t, d2), context_features)
-        up3 = self.sa6(self.up3(up2, t, d1), context_features)
-        
-        return self.final_conv(up3) 
+        h = self.in_conv(x)
+        hs = [h]
+
+        for block in self.down_blocks:
+            if "downsample" in block:
+                h = block["downsample"](h)
+            else:
+                h = block["res"](h, t)
+                h = block["attn"](h)
+            hs.append(h)
+
+        h = self.mid_res1(h, t)
+        h = self.mid_attn(h)
+        h = self.mid_res2(h, t)
+
+        for block in self.up_blocks:
+            if "upsample" in block:
+                h = block["upsample"](h)
+            else:
+                h = torch.cat([h, hs.pop()], dim=1)
+                h = block["res"](h, t)
+                h = block["attn"](h)
+
+        h = F.silu(self.out_norm(h))
+        return self.out_conv(h)

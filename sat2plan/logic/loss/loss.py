@@ -123,19 +123,76 @@ class GradientPenalty:
         return gradient_penalty * self.lambda_gp
 
 
-"""# Exemple d'utilisation :
-alpha1 = 1.0
-alpha2 = 1.0
-alpha3 = 1.0
+def r1_penalty(d_real, real_samples):
+    """R1 gradient penalty (Mescheder et al. 2018).
 
-adversarial_loss = AdversarialLoss()
-content_loss = ContentLoss(alpha1, alpha2, alpha3)
-style_loss = StyleLoss()
+    Pénalise la norme du gradient du discriminateur évalué sur les vrais
+    échantillons uniquement. Beaucoup plus stable que WGAN-GP pour un GAN
+    conditionnel et compatible avec une loss hinge.
 
-# Exemple de calcul de chaque perte
+    Args:
+        d_real: sortie (logits) du discriminateur sur les vrais échantillons.
+        real_samples: le tenseur réel d'entrée (doit avoir requires_grad=True).
 
-adv_loss = adversarial_loss(y_fake, y)
+    Returns:
+        Le scalaire R1 = E[||grad_x D(x)||^2].
+    """
+    grad = torch.autograd.grad(
+        outputs=d_real.sum(),
+        inputs=real_samples,
+        create_graph=True,
+        only_inputs=True,
+    )[0]
+    return grad.pow(2).reshape(grad.size(0), -1).sum(dim=1).mean()
 
-content_loss_value = content_loss(y_fake, y)
 
-style_loss_value = style_loss(y_fake, y)"""
+class VGGPerceptualLoss(nn.Module):
+    """Perceptual loss multi-couches basée sur VGG16 (relu1_2 → relu4_3).
+
+    Adaptée à la traduction sat→carte : les couches basses capturent les
+    contours nets (routes, bâti) et les couches hautes la cohérence
+    structurelle, là où une L1 pure produit du flou.
+    """
+
+    # Indices de fin des blocs relu1_2, relu2_2, relu3_3, relu4_3 dans vgg16.features
+    _SLICES = [(0, 4), (4, 9), (9, 16), (16, 23)]
+
+    def __init__(self, weights=(1.0, 1.0, 1.0, 1.0)):
+        super().__init__()
+        vgg = models.vgg16(weights='DEFAULT').features.eval()
+        self.blocks = nn.ModuleList([
+            vgg[start:end] for start, end in self._SLICES
+        ])
+        for param in self.parameters():
+            param.requires_grad = False
+        self.weights = weights
+        self.register_buffer('mean', torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
+        self.register_buffer('std', torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
+
+    def _normalize(self, x):
+        # Les images sont dans [-1, 1] (Tanh / Normalize 0.5) -> [0, 1] -> ImageNet
+        x = (x + 1.0) * 0.5
+        return (x - self.mean) / self.std
+
+    def forward(self, y_fake, y):
+        f = self._normalize(y_fake)
+        t = self._normalize(y)
+        loss = 0.0
+        for block, w in zip(self.blocks, self.weights):
+            f = block(f)
+            t = block(t)
+            loss = loss + w * F.l1_loss(f, t)
+        return loss
+
+
+def feature_matching_loss(feats_fake, feats_real):
+    """Feature matching (pix2pixHD) : aligne les activations intermédiaires du
+    discriminateur entre faux et vrais. Stabilise l'entraînement et améliore le
+    détail bien mieux qu'un signal adversarial seul.
+
+    Les features réelles sont supposées détachées (pas de gradient vers D).
+    """
+    loss = 0.0
+    for ff, fr in zip(feats_fake, feats_real):
+        loss = loss + F.l1_loss(ff, fr.detach())
+    return loss / max(len(feats_fake), 1)

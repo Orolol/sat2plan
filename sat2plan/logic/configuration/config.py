@@ -40,7 +40,7 @@ class Global_Configuration:
         self.image_size = 256
         self.channels_img = 3
 
-        self.num_workers = 2
+        self.num_workers = 6
         self.l1_lambda = 10.0
         self.lambda_gp = 0.1
 

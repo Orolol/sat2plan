@@ -76,13 +76,21 @@ class Discriminator(nn.Module):
                 nn.init.constant_(m.weight, 1.0)
                 nn.init.constant_(m.bias, 0.0)
 
-    def forward(self, x, y):
+    def forward(self, x, y, return_features=False):
         x = torch.cat([x, y], dim=1)
+        feats = []
         x = self.initial(x)
+        feats.append(x)
         x = self.layer1(x)
+        feats.append(x)
         x = self.layer2(x)
+        feats.append(x)
         x = self.layer3(x)
-        return self.final(x)
+        feats.append(x)
+        out = self.final(x)
+        if return_features:
+            return out, feats
+        return out
 
 
 ####################################################################################################################
@@ -199,7 +207,6 @@ class Generator(nn.Module):
                 nn.init.constant_(m.weight, 1.0)
                 nn.init.constant_(m.bias, 0.0)
 
-    @torch.amp.autocast('cuda')
     def forward(self, x):
         # Convert to channels_last for better memory efficiency on modern GPUs
         x = x.to(memory_format=torch.channels_last)

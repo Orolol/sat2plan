@@ -1,110 +1,119 @@
+"""Entraîneur de diffusion conditionnelle sat→carte (style Palette).
+
+- v-prediction + Min-SNR-γ (cf. scheduler.py)
+- BF16 (Blackwell) sans GradScaler, channels_last, torch.compile
+- EMA des poids pour l'échantillonnage (essentiel en diffusion)
+- Métriques de qualité FID/LPIPS/SSIM sur échantillons DDIM (générateur EMA)
+- Checkpointing local dédié (flow.save_model est spécifique aux GAN)
+"""
+
 import os
+import copy
+import time
+import glob
 import tempfile
+import datetime
+
 import torch
 import torch.nn as nn
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
+
 from sat2plan.logic.configuration.config import Model_Configuration, Global_Configuration
 from sat2plan.logic.models.diffusion.unet import ConditionalUNet
-from sat2plan.logic.models.diffusion.scheduler import DDPMScheduler
-from sat2plan.scripts.flow import save_results, save_model, load_model
+from sat2plan.logic.models.diffusion.scheduler import GaussianDiffusion
+from sat2plan.logic.loss.metrics import ImageQualityMetrics
 from sat2plan.logic.preproc.dataset import Satellite2Map_Data
-import datetime
-import pandas as pd
+
+
+def _unwrap(model):
+    """Récupère le module nu derrière torch.compile / DDP."""
+    if hasattr(model, "_orig_mod"):
+        model = model._orig_mod
+    if hasattr(model, "module"):
+        model = model.module
+    return model
+
+
+class EMA:
+    """Moyenne mobile exponentielle des poids, pour l'échantillonnage."""
+
+    def __init__(self, model, decay=0.9999):
+        self.decay = decay
+        self.ema = copy.deepcopy(_unwrap(model)).eval()
+        for p in self.ema.parameters():
+            p.requires_grad_(False)
+
+    @torch.no_grad()
+    def update(self, model):
+        src = _unwrap(model)
+        for ep, p in zip(self.ema.parameters(), src.parameters()):
+            ep.mul_(self.decay).add_(p.detach(), alpha=1.0 - self.decay)
+        for eb, b in zip(self.ema.buffers(), src.buffers()):
+            eb.copy_(b)
+
 
 class DiffusionTrainer:
+    # Échantillonnage / éval
+    SAMPLE_STEPS = 50          # pas DDIM pour l'échantillonnage
+    EVAL_SAMPLE_BATCHES = 4    # nb de batches val échantillonnés pour les métriques
+
     def __init__(self, rank, world_size):
         try:
-            # Create and set up temporary directory
-            self.temp_dir = os.path.join(os.getcwd(), 'tmp')
+            self.temp_dir = os.path.join(os.getcwd(), "tmp")
             os.makedirs(self.temp_dir, exist_ok=True)
-            os.environ['TMPDIR'] = self.temp_dir
+            os.environ["TMPDIR"] = self.temp_dir
             tempfile.tempdir = self.temp_dir
 
-            # Import global parameters
             self.G_CFG = Global_Configuration()
             self.rank = rank
             self.world_size = world_size
             self.train_dir = f"{self.G_CFG.train_dir}/{self.G_CFG.data_bucket}"
             self.val_dir = f"{self.G_CFG.val_dir}/{self.G_CFG.data_bucket}"
             self.image_size = self.G_CFG.image_size
-            self.batch_size = self.G_CFG.batch_size
+            # La diffusion 256px est gourmande: on plafonne le batch pour éviter l'OOM.
+            self.batch_size = min(self.G_CFG.batch_size, 16)
             self.n_epochs = self.G_CFG.n_epochs
-            self.sample_interval = self.G_CFG.sample_interval
             self.num_workers = self.G_CFG.num_workers
             self.load_model = self.G_CFG.load_model
             self.save_model_bool = self.G_CFG.save_model
 
-            # Import model hyperparameters
+            self.lr = 1e-4  # lr saine pour un UNet de diffusion (l'ancien 1e-3 était trop élevé)
             self.M_CFG = Model_Configuration()
-            self.learning_rate = self.M_CFG.learning_rate_ViT
-            self.beta1 = self.M_CFG.beta1
-            self.beta2 = self.M_CFG.beta2
+            self.beta1, self.beta2 = 0.9, 0.999
 
-            # Setup device and distributed training
             self.setup_device()
             if self.cuda:
                 torch.cuda.set_device(self.rank)
 
-            # Load datasets
             self.dataloading()
-
-            # Create model, optimizer, and scheduler
             self.create_model()
-
-            if self.cuda:
-                torch.backends.cudnn.benchmark = True
-
-            if self.world_size > 1:
-                torch.autograd.set_detect_anomaly(True)
-
             self.train()
 
         except Exception as e:
             print(f"Error in process {rank}: {str(e)}")
             import traceback
-            print("Full traceback:")
             traceback.print_exc()
-            if hasattr(self, 'cleanup'):
+            if hasattr(self, "cleanup"):
                 self.cleanup()
             raise
 
     def setup_device(self):
-        try:
-            self.cuda = torch.cuda.is_available()
-            if self.cuda:
-                print(f"CUDA is available - Using GPU {self.rank}")
-                self.device = torch.device(f'cuda:{self.rank}')
-                
-                # CUDA configuration for performance
-                torch.backends.cudnn.benchmark = True
-                torch.backends.cuda.matmul.allow_tf32 = True
-                torch.backends.cudnn.allow_tf32 = True
-                
-                if self.world_size > 1:
-                    os.environ['MASTER_ADDR'] = 'localhost'
-                    os.environ['MASTER_PORT'] = '12355'
-                    dist.init_process_group(
-                        "nccl", 
-                        rank=self.rank, 
-                        world_size=self.world_size,
-                        timeout=datetime.timedelta(minutes=30)
-                    )
-                
-                # Pre-allocate CUDA memory
-                torch.cuda.empty_cache()
-                total_memory = torch.cuda.get_device_properties(self.rank).total_memory
-                reserved_memory = int(total_memory * 0.95)
-                torch.cuda.set_per_process_memory_fraction(0.95, self.rank)
-                
-                print(f"GPU {self.rank}: Reserved {reserved_memory/1024**3:.1f}GB of VRAM")
-            else:
-                print("CUDA not available - Using CPU")
-                self.device = torch.device("cpu")
-        except Exception as e:
-            print(f"Error in setup_device for process {self.rank}: {str(e)}")
-            raise
+        self.cuda = torch.cuda.is_available()
+        if not self.cuda:
+            raise RuntimeError("CUDA requis mais indisponible.")
+        self.device = torch.device(f"cuda:{self.rank}")
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        if self.world_size > 1:
+            os.environ["MASTER_ADDR"] = "localhost"
+            os.environ["MASTER_PORT"] = "12355"
+            dist.init_process_group("nccl", rank=self.rank, world_size=self.world_size,
+                                    timeout=datetime.timedelta(minutes=30))
+        torch.cuda.set_per_process_memory_fraction(0.95, self.rank)
+        print(f"GPU {self.rank}: {torch.cuda.get_device_name(self.rank)}")
 
     def cleanup(self):
         try:
@@ -112,306 +121,220 @@ class DiffusionTrainer:
                 dist.barrier()
                 dist.destroy_process_group()
         except Exception as e:
-            print(f"Warning: Error during cleanup: {e}")
-        finally:
-            if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
-                try:
-                    import shutil
-                    shutil.rmtree(self.temp_dir)
-                except Exception as e:
-                    print(f"Warning: Could not remove temporary directory: {e}")
+            print(f"Warning: cleanup: {e}")
 
     def dataloading(self):
         os.makedirs("images", exist_ok=True)
-        os.makedirs("data", exist_ok=True)
-
-        self.train_dataset = Satellite2Map_Data(root=self.train_dir)
-        self.val_dataset = Satellite2Map_Data(root=self.val_dir)
+        self.train_dataset = Satellite2Map_Data(root=self.train_dir, image_size=self.image_size)
+        self.val_dataset = Satellite2Map_Data(root=self.val_dir, image_size=self.image_size)
 
         if self.cuda and self.world_size > 1:
             train_sampler = torch.utils.data.distributed.DistributedSampler(
-                self.train_dataset,
-                num_replicas=self.world_size,
-                rank=self.rank
-            )
+                self.train_dataset, num_replicas=self.world_size, rank=self.rank, shuffle=True)
             val_sampler = torch.utils.data.distributed.DistributedSampler(
-                self.val_dataset,
-                num_replicas=self.world_size,
-                rank=self.rank
-            )
+                self.val_dataset, num_replicas=self.world_size, rank=self.rank, shuffle=False)
         else:
-            train_sampler = None
-            val_sampler = None
+            train_sampler = val_sampler = None
 
-        self.train_dl = DataLoader(
-            self.train_dataset,
-            batch_size=self.batch_size,
-            shuffle=(train_sampler is None),
-            num_workers=self.num_workers,
-            pin_memory=True,
-            sampler=train_sampler,
-            drop_last=True
-        )
-
-        self.val_dl = DataLoader(
-            self.val_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=True,
-            sampler=val_sampler,
-            drop_last=True
-        )
-
-        print(f"Train Data Loaded - {len(self.train_dataset)} images")
-        print(f"Validation Data Loaded - {len(self.val_dataset)} images")
+        kwargs = dict(batch_size=self.batch_size, num_workers=self.num_workers,
+                      pin_memory=True, persistent_workers=self.num_workers > 0,
+                      prefetch_factor=2 if self.num_workers > 0 else None, drop_last=True)
+        self.train_dl = DataLoader(self.train_dataset, shuffle=(train_sampler is None),
+                                   sampler=train_sampler, **kwargs)
+        self.val_dl = DataLoader(self.val_dataset, shuffle=False, sampler=val_sampler, **kwargs)
+        print(f"Train: {len(self.train_dataset)} | Val: {len(self.val_dataset)} | batch={self.batch_size}")
 
     def create_model(self):
-        # Initialize model
         self.model = ConditionalUNet(
-            in_channels=3,
-            out_channels=3,
-            time_dim=256,
-            context_dim=768
-        ).to(self.device)
+            in_channels=3, cond_channels=3, out_channels=3,
+            base=64, ch_mult=(1, 2, 2, 4, 4), num_res_blocks=2,
+            attn_resolutions=(32, 16), time_dim=256, image_size=self.image_size,
+        ).to(self.device, memory_format=torch.channels_last)
 
-        # Initialize diffusion scheduler
-        self.scheduler = DDPMScheduler(
-            timesteps=1000,
-            schedule="cosine",  # Using cosine schedule for better results
-            device=self.device
+        self.diffusion = GaussianDiffusion(
+            timesteps=1000, schedule="cosine", prediction_type="v",
+            min_snr_gamma=5.0, device=self.device,
         )
 
-        # Calculate and display total parameters
-        total_params = sum(p.numel() for p in self.model.parameters())
-        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        print(f"\nModel Statistics:")
-        print(f"Total Parameters: {total_params:,}")
-        print(f"Trainable Parameters: {trainable_params:,}")
-        print(f"Image size: {self.image_size}x{self.image_size}")
-        print(f"Diffusion steps: {self.scheduler.timesteps}\n")
+        total = sum(p.numel() for p in self.model.parameters())
+        print(f"Diffusion UNet — {total/1e6:.1f}M params | v-pred + Min-SNR | {self.diffusion.timesteps} steps")
 
-        # Setup distributed training if using CUDA
+        # EMA AVANT compile/DDP (copie du module nu).
+        self.ema = EMA(self.model, decay=0.9999)
+
+        if hasattr(torch, "compile"):
+            try:
+                self.model = torch.compile(self.model)
+                print("Modèle compilé (torch.compile)")
+            except Exception as e:
+                print(f"Warning: compile échoué: {e}")
+
         if self.cuda and self.world_size > 1:
-            self.model = nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
             self.model = nn.parallel.DistributedDataParallel(
                 self.model, device_ids=[self.rank], output_device=self.rank)
-            print(f"Model wrapped in DistributedDataParallel on GPU {self.rank}")
 
-        # Initialize optimizer
-        self.optimizer = torch.optim.AdamW(
-            self.model.parameters(),
-            lr=self.learning_rate,
-            betas=(self.beta1, self.beta2),
-            weight_decay=0.01
-        )
-
-        # Learning rate scheduler with warmup
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr,
+                                           betas=(self.beta1, self.beta2), weight_decay=0.01)
         self.lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            self.optimizer,
-            max_lr=self.learning_rate,
-            epochs=self.n_epochs,
-            steps_per_epoch=len(self.train_dl),
-            pct_start=0.1,
-            div_factor=25,
-            final_div_factor=1000,
-        )
+            self.optimizer, max_lr=self.lr, epochs=self.n_epochs,
+            steps_per_epoch=len(self.train_dl), pct_start=0.05,
+            div_factor=10, final_div_factor=100)
 
-        # Load model if requested
+        self.metrics = ImageQualityMetrics(self.device) if self.rank == 0 else None
+        self.last_metrics = {}
+
         self.starting_epoch = 0
+        self.best_score = float("inf")
+        self.patience, self.patience_counter = 20, 0
         if self.load_model:
-            try:
-                model_and_optimizer, epoch = load_model()
-                self.model.load_state_dict(model_and_optimizer['model_state_dict'])
-                self.optimizer.load_state_dict(model_and_optimizer['optimizer_state_dict'])
-                self.starting_epoch = epoch
-                print(f"Successfully loaded model from epoch {epoch}")
-            except Exception as e:
-                print(f"Error loading model: {e}")
-                print("Starting from scratch")
+            self._load_latest()
 
-        # Initialize loss history
-        self.train_losses = []
-        self.val_losses = []
-
-        # Early stopping parameters
-        self.best_loss = float('inf')
-        self.patience = 15
-        self.patience_counter = 0
-
-        # Mixed precision training
-        self.scaler = torch.cuda.amp.GradScaler()
-
+    # ---------------- entraînement ----------------
     def train(self):
         try:
             if self.rank == 0:
-                os.makedirs("save", exist_ok=True)
-                os.makedirs("save/loss", exist_ok=True)
                 os.makedirs("save/checkpoints", exist_ok=True)
                 os.makedirs("images", exist_ok=True)
 
-            # For throughput calculation
-            import time
             batch_times = []
-
             for epoch in range(self.starting_epoch, self.n_epochs):
                 if self.world_size > 1:
                     self.train_dl.sampler.set_epoch(epoch)
+                epoch_start, total_images, epoch_loss, num_batches = time.time(), 0, 0.0, 0
 
-                epoch_start_time = time.time()
-                total_images = 0
-                epoch_loss = 0
-                num_batches = 0
-
-                # Training phase
                 self.model.train()
-                
-                for idx, (context, target, _) in enumerate(self.train_dl):
-                    batch_start_time = time.time()
+                for idx, (cond, target, _) in enumerate(self.train_dl):
+                    t0 = time.time()
                     num_batches += 1
-                    current_batch_size = context.size(0)
-                    
-                    context = context.to(self.device, non_blocking=True)
-                    target = target.to(self.device, non_blocking=True)
-                    total_images += current_batch_size
+                    bs = cond.size(0)
+                    total_images += bs
+                    cond = cond.to(self.device, non_blocking=True).to(memory_format=torch.channels_last)
+                    target = target.to(self.device, non_blocking=True).to(memory_format=torch.channels_last)
 
-                    # Sample random timesteps
-                    t = torch.randint(0, self.scheduler.timesteps, (current_batch_size,),
-                                    device=self.device).long()
+                    t = torch.randint(0, self.diffusion.timesteps, (bs,), device=self.device).long()
 
                     self.optimizer.zero_grad(set_to_none=True)
-
-                    with torch.cuda.amp.autocast():
-                        loss = self.scheduler.p_losses(self.model, target, t, context)
-
-                    self.scaler.scale(loss).backward()
-                    self.scaler.unscale_(self.optimizer)
+                    with torch.autocast("cuda", dtype=torch.bfloat16):
+                        loss = self.diffusion.p_losses(self.model, target, t, cond)
+                    loss.backward()
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-
+                    self.optimizer.step()
                     self.lr_scheduler.step()
+                    self.ema.update(self.model)
 
                     epoch_loss += loss.item()
 
-                    # Calculate and log throughput
-                    batch_end_time = time.time()
-                    batch_time = batch_end_time - batch_start_time
-                    batch_times.append(batch_time)
+                    batch_times.append(time.time() - t0)
                     if len(batch_times) > 50:
                         batch_times.pop(0)
-                    avg_time = sum(batch_times) / len(batch_times)
-                    images_per_sec = current_batch_size / avg_time
+                    ips = bs / (sum(batch_times) / len(batch_times))
 
                     if self.rank == 0 and idx % 10 == 0:
-                        print(
-                            f"[Epoch {epoch+1}/{self.n_epochs}] "
-                            f"[Batch {idx+1}/{len(self.train_dl)}] "
-                            f"[Loss: {loss.item():.4f}] "
-                            f"[{images_per_sec:.2f} img/s] "
-                            f"[lr: {self.optimizer.param_groups[0]['lr']:.2e}]"
-                        )
-
+                        print(f"[Epoch {epoch+1}/{self.n_epochs}] [Batch {idx+1}/{len(self.train_dl)}] "
+                              f"[loss {loss.item():.4f}] [{ips:.1f} img/s] "
+                              f"[lr {self.optimizer.param_groups[0]['lr']:.2e}]")
                         if idx % 100 == 0:
-                            # Generate samples
-                            self.model.eval()
-                            with torch.no_grad():
-                                samples = self.scheduler.ddim_sample(
-                                    self.model,
-                                    context[:4],
-                                    (4, 3, self.image_size, self.image_size),
-                                    self.device
-                                )
-                                img_grid = torch.cat((context[:4], samples, target[:4]), dim=2)
-                                save_image(img_grid, f"images/{epoch}-{idx}.png", nrow=1, normalize=True)
-                            self.model.train()
+                            self._save_samples(cond, target, epoch, idx)
 
-                # Synchronize losses across GPUs
                 if self.world_size > 1:
-                    dist.all_reduce(torch.tensor([epoch_loss], device=self.device))
-                    epoch_loss /= self.world_size
+                    lt = torch.tensor([epoch_loss], device=self.device)
+                    dist.all_reduce(lt, op=dist.ReduceOp.SUM)
+                    epoch_loss = lt[0].item() / self.world_size
 
                 if self.rank == 0:
-                    avg_epoch_loss = epoch_loss / num_batches
-                    self.train_losses.append(avg_epoch_loss)
+                    avg_loss = epoch_loss / num_batches
+                    thru = total_images / (time.time() - epoch_start)
+                    print(f"Epoch {epoch+1} terminé — loss {avg_loss:.4f} — {thru:.1f} img/s")
 
-                    # Calculate epoch throughput
-                    epoch_time = time.time() - epoch_start_time
-                    epoch_throughput = total_images / epoch_time
-                    print(f"Epoch {epoch+1} completed. Average throughput: {epoch_throughput:.2f} images/s")
+                    val_loss = self._validate()
+                    m = self.last_metrics
+                    if "lpips" in m:
+                        score, score_name = m["lpips"], "LPIPS"
+                    else:
+                        score, score_name = val_loss, "val_loss"
+                    metric_str = "  ".join(f"{k.upper()}: {v:.4f}" for k, v in m.items()) or "—"
+                    print(f"📐 Qualité: {metric_str} | denoise val: {val_loss:.4f} | "
+                          f"score({score_name}): {score:.4f} (best {self.best_score:.4f})")
 
-                    # Validation
-                    val_loss = self.validate()
-                    self.val_losses.append(val_loss)
-                    print(f"Validation Loss: {val_loss:.4f}")
-
-                    # Save model if it's the best so far
-                    if val_loss < self.best_loss:
-                        self.best_loss = val_loss
+                    if score < self.best_score:
+                        self.best_score = score
                         self.patience_counter = 0
                         if self.save_model_bool:
-                            save_model(
-                                models={'model': self.model},
-                                optimizers={'optimizer': self.optimizer},
-                                suffix=f"-best-{epoch}"
-                            )
+                            self._save_ckpt(f"-best", epoch)
                     else:
                         self.patience_counter += 1
 
-                    # Regular checkpointing
                     if epoch % 10 == 0 and self.save_model_bool:
-                        save_model(
-                            models={'model': self.model},
-                            optimizers={'optimizer': self.optimizer},
-                            suffix=f"-{epoch}"
-                        )
-                        save_results(
-                            params=self.M_CFG,
-                            metrics={'train_loss': avg_epoch_loss, 'val_loss': val_loss}
-                        )
+                        self._save_ckpt(f"-{epoch}", epoch)
 
-                    # Early stopping check
                     if self.patience_counter >= self.patience:
-                        print(f"Early stopping triggered after {epoch + 1} epochs")
+                        print(f"Early stopping après {epoch+1} epochs")
                         break
 
-            if self.rank == 0:
-                # Final save
-                save_model(
-                    models={'model': self.model},
-                    optimizers={'optimizer': self.optimizer},
-                    suffix="-final"
-                )
-
-        except Exception as e:
-            print(f"Error during training: {e}")
-            raise
+            if self.rank == 0 and self.save_model_bool:
+                self._save_ckpt("-final", self.n_epochs)
         finally:
             self.cleanup()
 
-    def validate(self):
+    # ---------------- validation ----------------
+    @torch.no_grad()
+    def _validate(self):
         self.model.eval()
-        val_loss = 0
-        num_batches = 0
+        if self.metrics is not None:
+            self.metrics.reset()
 
-        with torch.no_grad():
-            for context, target, _ in self.val_dl:
-                context = context.to(self.device, non_blocking=True)
-                target = target.to(self.device, non_blocking=True)
+        sum_loss, num = 0.0, 0
+        for idx, (cond, target, _) in enumerate(self.val_dl):
+            cond = cond.to(self.device, non_blocking=True).to(memory_format=torch.channels_last)
+            target = target.to(self.device, non_blocking=True).to(memory_format=torch.channels_last)
+            t = torch.randint(0, self.diffusion.timesteps, (cond.size(0),), device=self.device).long()
+            with torch.autocast("cuda", dtype=torch.bfloat16):
+                loss = self.diffusion.p_losses(self.model, target, t, cond)
+            sum_loss += loss.item()
+            num += 1
 
-                # Sample random timesteps
-                t = torch.randint(0, self.scheduler.timesteps, (context.size(0),),
-                                device=self.device).long()
+            # Métriques de qualité sur quelques batches échantillonnés (générateur EMA).
+            if self.metrics is not None and idx < self.EVAL_SAMPLE_BATCHES:
+                with torch.autocast("cuda", dtype=torch.bfloat16):
+                    fake = self.diffusion.ddim_sample(
+                        self.ema.ema, cond, cond.shape, self.device, steps=self.SAMPLE_STEPS)
+                self.metrics.update(fake, target)
 
-                with torch.cuda.amp.autocast():
-                    loss = self.scheduler.p_losses(self.model, target, t, context)
-
-                val_loss += loss.item()
-                num_batches += 1
-
-                # Clean up GPU memory
-                if num_batches % 2 == 0:
-                    torch.cuda.empty_cache()
-
+        self.last_metrics = self.metrics.compute() if self.metrics is not None else {}
         self.model.train()
-        return val_loss / num_batches 
+        return sum_loss / max(num, 1)
+
+    # ---------------- I/O ----------------
+    @torch.no_grad()
+    def _save_samples(self, cond, target, epoch, idx):
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            samples = self.diffusion.ddim_sample(
+                self.ema.ema, cond[:4], (min(4, cond.size(0)), 3, self.image_size, self.image_size),
+                self.device, steps=self.SAMPLE_STEPS)
+        grid = torch.cat((cond[:4], samples, target[:4]), dim=2).float()
+        save_image(grid, f"images/diff-{epoch}-{idx}.png", nrow=4, normalize=True)
+
+    def _save_ckpt(self, suffix, epoch):
+        path = f"save/checkpoints/diffusion{suffix}.pt"
+        tmp = path + ".tmp"
+        torch.save({
+            "model_state_dict": _unwrap(self.model).state_dict(),
+            "ema_state_dict": self.ema.ema.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "epoch": epoch,
+        }, tmp)
+        os.replace(tmp, path)
+        print(f"💾 Checkpoint: {path}")
+
+    def _load_latest(self):
+        paths = glob.glob("save/checkpoints/diffusion*.pt")
+        if not paths:
+            print("Aucun checkpoint diffusion trouvé, départ de zéro.")
+            return
+        path = max(paths, key=os.path.getmtime)
+        ckpt = torch.load(path, map_location=self.device)
+        _unwrap(self.model).load_state_dict(ckpt["model_state_dict"])
+        self.ema.ema.load_state_dict(ckpt["ema_state_dict"])
+        self.optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        self.starting_epoch = ckpt.get("epoch", 0)
+        print(f"Checkpoint chargé: {path} (epoch {self.starting_epoch})")

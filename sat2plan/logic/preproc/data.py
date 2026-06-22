@@ -60,10 +60,12 @@ def download_bucket_folder(folder_name, val_size=0):
             if val_size == 0:
                 file_path = os.path.join(destination_folder, blob.name)
             else:
-                if idx % 10 > 10*val_size:
-                    file_path = os.path.join(
-                        destination_folder, 'split/train', blob.name)
-                else:
+                # Route approximately `val_size` fraction to validation
+                # Example: val_size=0.2 -> idx%10 < 2 goes to val (~20%)
+                if (idx % 10) < int(10 * val_size):
                     file_path = os.path.join(
                         destination_folder, 'split/val', blob.name)
+                else:
+                    file_path = os.path.join(
+                        destination_folder, 'split/train', blob.name)
             executor.submit(download_file, blob, file_path)

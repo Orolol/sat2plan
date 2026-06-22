@@ -292,7 +292,10 @@ class UCVGan(nn.Module):
         if hasattr(torch, 'compile'):
             try:
                 print("Compiling generator with torch.compile()...")
-                self.netG = torch.compile(self.netG, mode="max-autotune")
+                # Mode par défaut: compile rapide et kernels fiables. max-autotune
+                # générait des kernels Inductor fautifs (illegal memory access) sur
+                # ce générateur (240M params + checkpointing + channels_last + ViT).
+                self.netG = torch.compile(self.netG)
                 print("Generator successfully compiled")
             except Exception as e:
                 print(f"Warning: Model compilation failed: {e}")

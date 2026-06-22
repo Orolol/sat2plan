@@ -55,17 +55,18 @@ def download_bucket_folder(folder_name, val_size=0):
     bucket = storage_client.bucket(BUCKET_NAME)
     blobs = bucket.list_blobs(prefix=folder_name)
 
+    # Un blob sur `val_every` part en validation (robuste aux petites fractions:
+    # val_size=0.05 -> 1/20, l'ancien `idx%10 < int(10*0.05)` donnait 0 -> val vide).
+    val_every = int(round(1.0 / val_size)) if val_size and val_size > 0 else 0
+
     with ThreadPoolExecutor(max_workers=64) as executor:
         for idx, blob in enumerate(blobs):
-            if val_size == 0:
+            if not val_every:
                 file_path = os.path.join(destination_folder, blob.name)
+            elif idx % val_every == 0:
+                file_path = os.path.join(
+                    destination_folder, 'split/val', blob.name)
             else:
-                # Route approximately `val_size` fraction to validation
-                # Example: val_size=0.2 -> idx%10 < 2 goes to val (~20%)
-                if (idx % 10) < int(10 * val_size):
-                    file_path = os.path.join(
-                        destination_folder, 'split/val', blob.name)
-                else:
-                    file_path = os.path.join(
-                        destination_folder, 'split/train', blob.name)
+                file_path = os.path.join(
+                    destination_folder, 'split/train', blob.name)
             executor.submit(download_file, blob, file_path)
